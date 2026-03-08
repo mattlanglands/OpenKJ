@@ -246,6 +246,8 @@ public:
     bool eqBBypass();
     int getEqBLevel(int band);
     int requestServerInterval();
+    bool embeddedApiAccepting();
+    int embeddedApiSerial();
     bool bmKCrossFade();
     bool requestRemoveOnRotAdd();
     bool requestDialogAutoShow();
@@ -364,6 +366,8 @@ public slots:
     void setEqBBypass(bool bypass);
     void setEqBLevel(int band, int level);
     void setRequestServerInterval(int interval);
+    void setEmbeddedApiAccepting(bool accepting);
+    void setEmbeddedApiSerial(int serial);
     void setTickerShowRotationInfo(bool show);
     void setRequestRemoveOnRotAdd(bool remove);
     void setRequestDialogAutoShow(bool enabled);

@@ -724,6 +724,13 @@ MainWindow::MainWindow(QWidget *parent) :
     loadSettings();
     setupShortcuts();
     setupConnections();
+
+    if (!m_embeddedApi.start(5050)) {
+        m_logger->error("{} Failed to start embedded API server on port 5050", m_loggingPrefix);
+    } else {
+        m_logger->info("{} Embedded API server listening on port 5050", m_loggingPrefix);
+    }
+
     m_timerSlowUiUpdate.start(10000);
 }
 
@@ -1398,6 +1405,7 @@ void MainWindow::play(const QString &karaokeFilePath, const bool &k2k) {
 
 MainWindow::~MainWindow() {
     m_shuttingDown = true;
+    m_embeddedApi.stop();
     cdgWindow->stopTicker();
 #ifdef _MSC_VER
     timeEndPeriod(1);
@@ -4397,7 +4405,6 @@ void MainWindow::showAddSingerDialog() {
     } else
         dlgAddSinger->raise();
 }
-
 
 
 

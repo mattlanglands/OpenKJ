@@ -56,6 +56,7 @@
 #include "songshop.h"
 #include "durationlazyupdater.h"
 #include "dlgvideopreview.h"
+#include "openkjembeddedapi.h"
 #include "src/models/tablemodelhistorysongs.h"
 #include "src/models/tablemodelplaylistsongs.h"
 #include "src/models/tablemodelqueuesongs.h"
@@ -158,6 +159,7 @@ private:
     std::shared_ptr<SongShop> m_songShop;
     std::unique_ptr<UpdateChecker> m_updateChecker;
     OKJSongbookAPI m_songbookApi;
+    OpenKJEmbeddedApi m_embeddedApi{m_rotModel, m_qModel, m_settings, this};
     QWidget *m_historyTabWidget;
     std::mt19937_64 rng;
 

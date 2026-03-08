@@ -451,6 +451,7 @@ set(SOURCE_FILES
         src/dlgeq.cpp
         src/audiofader.cpp
         src/customlineedit.cpp
+        src/openkjembeddedapi.cpp
         src/tickernew.cpp
         src/updatechecker.cpp
         src/videodisplay.cpp
@@ -512,6 +513,7 @@ set(SOURCE_FILES
         src/dlgeq.h
         src/audiofader.h
         src/customlineedit.h
+        src/openkjembeddedapi.h
         src/tickernew.h
         src/updatechecker.h
         src/videodisplay.h
@@ -768,5 +770,4 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
         )
     endif ()
 endif ()
-
 
