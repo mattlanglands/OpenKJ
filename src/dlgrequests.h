@@ -23,6 +23,7 @@
 
 #include <QDialog>
 #include <QItemSelection>
+#include <optional>
 #include "src/models/tablemodelrequests.h"
 #include "src/models/tablemodelkaraokesongs.h"
 #include "src/models/tablemodelrotation.h"
@@ -111,6 +112,10 @@ protected:
     // QWidget interface
 protected:
     void closeEvent(QCloseEvent *event);
+
+private:
+    bool autoImportRequest(const OkjsRequest &request);
+    std::optional<int> findSongIdForRequest(const QString &artist, const QString &title);
 };
 
 #endif // KHREQUESTSDIALOG_H

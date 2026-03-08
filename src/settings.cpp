@@ -1306,6 +1306,16 @@ void Settings::setRequestServerInterval(int interval)
     emit requestServerIntervalChanged(interval);
 }
 
+void Settings::setEmbeddedApiAccepting(bool accepting)
+{
+    settings->setValue("embeddedApiAccepting", accepting);
+}
+
+void Settings::setEmbeddedApiSerial(int serial)
+{
+    settings->setValue("embeddedApiSerial", serial);
+}
+
 void Settings::setTickerShowRotationInfo(bool show)
 {
     settings->setValue("tickerShowRotationInfo", show);
@@ -1606,6 +1616,16 @@ int Settings::getEqBLevel(int band)
 int Settings::requestServerInterval()
 {
     return settings->value("requestServerInterval", 30).toInt();
+}
+
+bool Settings::embeddedApiAccepting()
+{
+    return settings->value("embeddedApiAccepting", true).toBool();
+}
+
+int Settings::embeddedApiSerial()
+{
+    return settings->value("embeddedApiSerial", 1).toInt();
 }
 
 bool Settings::bmKCrossFade()
