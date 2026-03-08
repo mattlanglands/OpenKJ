@@ -59,9 +59,14 @@ private:
     QJsonObject commandGetRequests();
     QJsonObject commandDeleteRequest(const QJsonObject &payload);
     QJsonObject commandSetAccepting(const QJsonObject &payload);
+    QJsonObject commandAdminAction(const QJsonObject &payload);
 
     bool removeQueueSongById(int qsongId);
     void normalizeSingerQueuePositions(int singerId);
+    bool moveQueueSongByOffset(int qsongId, int offset);
+    bool setQueueSongKey(int qsongId, int keyChange);
+    int currentSingerId() const;
+    int nextSingerId(int direction) const;
 };
 
 #endif

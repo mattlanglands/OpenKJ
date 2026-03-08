@@ -188,11 +188,11 @@ QByteArray OpenKJEmbeddedApi::handleRequest(const HttpRequest &request)
         const QString secondary = (by == "title") ? "artist" : "title";
 
         QSqlQuery query;
-        query.prepare(QString("SELECT songid, artist, title FROM dbsongs "
+        query.prepare(QString("SELECT songid, artist, title, COALESCE(duration, 0) FROM dbsongs "
                               "WHERE discid != '!!DROPPED!!' AND discid != '!!BAD!!' "
                               "AND upper(trim(%1)) LIKE :prefix "
                               "ORDER BY upper(%1), upper(%2) LIMIT :limit").arg(primary, secondary));
-        query.bindValue(":prefix", QString("%1%").arg(letter));
+        query.bindValue(":prefix", letter + "%");
         query.bindValue(":limit", limit);
 
         QJsonArray songs;
@@ -202,6 +202,7 @@ QByteArray OpenKJEmbeddedApi::handleRequest(const HttpRequest &request)
                 song.insert("song_id", query.value(0).toInt());
                 song.insert("artist", query.value(1).toString());
                 song.insert("title", query.value(2).toString());
+                song.insert("duration_seconds", std::max(1, query.value(3).toInt() / 1000));
                 songs.append(song);
             }
         }
@@ -252,6 +253,10 @@ QByteArray OpenKJEmbeddedApi::handleApiCommand(const QJsonObject &payload)
 
     if (command == "setAccepting") {
         return commandSetAccepting(payload);
+    }
+
+    if (command == "adminAction") {
+        return commandAdminAction(payload);
     }
 
     if (command == "getVenues") {
@@ -322,7 +327,7 @@ QJsonObject OpenKJEmbeddedApi::commandSearch(const QJsonObject &payload)
     QStringList terms = searchString.split(' ', Qt::SkipEmptyParts);
     QSqlQuery query;
 
-    QString sql = "SELECT songid, artist, title FROM dbsongs "
+    QString sql = "SELECT songid, artist, title, COALESCE(duration, 0) FROM dbsongs "
                   "WHERE discid != '!!DROPPED!!' AND discid != '!!BAD!!' ";
     if (!terms.isEmpty()) {
         for (int i = 0; i < terms.size(); ++i) {
@@ -350,6 +355,7 @@ QJsonObject OpenKJEmbeddedApi::commandSearch(const QJsonObject &payload)
             song.insert("song_id", query.value(0).toInt());
             song.insert("artist", artist);
             song.insert("title", title);
+            song.insert("duration_seconds", std::max(1, query.value(3).toInt() / 1000));
             songs.append(song);
         }
     }
@@ -404,25 +410,80 @@ QJsonObject OpenKJEmbeddedApi::commandSubmitRequest(const QJsonObject &payload)
 
 QJsonObject OpenKJEmbeddedApi::commandGetRequests()
 {
+    const int nowSingerId = currentSingerId();
+
+    QJsonObject nowPlaying;
+    if (nowSingerId >= 0) {
+        QSqlQuery nowQuery;
+        nowQuery.prepare(
+            "SELECT qs.qsongid, rs.name, d.songid, d.artist, d.title, COALESCE(d.duration, 0) "
+            "FROM queuesongs qs "
+            "INNER JOIN rotationsingers rs ON rs.singerid = qs.singer "
+            "INNER JOIN dbsongs d ON d.songid = qs.song "
+            "WHERE qs.singer = :singerId "
+            "ORDER BY qs.played ASC, qs.position ASC LIMIT 1");
+        nowQuery.bindValue(":singerId", nowSingerId);
+        if (nowQuery.exec() && nowQuery.next()) {
+            nowPlaying.insert("request_id", nowQuery.value(0).toInt());
+            nowPlaying.insert("singer", nowQuery.value(1).toString());
+            nowPlaying.insert("song_id", nowQuery.value(2).toInt());
+            nowPlaying.insert("artist", nowQuery.value(3).toString());
+            nowPlaying.insert("title", nowQuery.value(4).toString());
+            nowPlaying.insert("duration_seconds", std::max(1, nowQuery.value(5).toInt() / 1000));
+            nowPlaying.insert("request_time", QDateTime::currentSecsSinceEpoch());
+        }
+    }
+
     QSqlQuery query;
     query.prepare(
-        "SELECT qs.qsongid, rs.name, d.artist, d.title "
+        "SELECT qs.qsongid, rs.name, d.songid, d.artist, d.title, COALESCE(d.duration, 0), qs.keychg "
         "FROM queuesongs qs "
         "INNER JOIN rotationsingers rs ON rs.singerid = qs.singer "
         "INNER JOIN dbsongs d ON d.songid = qs.song "
-        "WHERE qs.played = 0 "
+        "WHERE qs.played = 0 AND qs.singer != :nowSinger "
         "ORDER BY rs.position ASC, qs.position ASC");
+    query.bindValue(":nowSinger", nowSingerId);
 
     QJsonArray requests;
+    QJsonArray upNext;
     if (query.exec()) {
         while (query.next()) {
             QJsonObject request;
             request.insert("request_id", query.value(0).toInt());
             request.insert("singer", query.value(1).toString());
-            request.insert("artist", query.value(2).toString());
-            request.insert("title", query.value(3).toString());
+            request.insert("song_id", query.value(2).toInt());
+            request.insert("artist", query.value(3).toString());
+            request.insert("title", query.value(4).toString());
+            request.insert("duration_seconds", std::max(1, query.value(5).toInt() / 1000));
+            request.insert("key_change", query.value(6).toInt());
             request.insert("request_time", QDateTime::currentSecsSinceEpoch());
             requests.append(request);
+            upNext.append(request);
+        }
+    }
+
+    QJsonArray recentlyPlayed;
+    if (nowSingerId >= 0) {
+        QSqlQuery playedQuery;
+        playedQuery.prepare(
+            "SELECT qs.qsongid, rs.name, d.songid, d.artist, d.title, COALESCE(d.duration, 0) "
+            "FROM queuesongs qs "
+            "INNER JOIN rotationsingers rs ON rs.singerid = qs.singer "
+            "INNER JOIN dbsongs d ON d.songid = qs.song "
+            "WHERE qs.played = 1 "
+            "ORDER BY qs.qsongid DESC LIMIT 30");
+        if (playedQuery.exec()) {
+            while (playedQuery.next()) {
+                QJsonObject item;
+                item.insert("request_id", playedQuery.value(0).toInt());
+                item.insert("singer", playedQuery.value(1).toString());
+                item.insert("song_id", playedQuery.value(2).toInt());
+                item.insert("artist", playedQuery.value(3).toString());
+                item.insert("title", playedQuery.value(4).toString());
+                item.insert("duration_seconds", std::max(1, playedQuery.value(5).toInt() / 1000));
+                item.insert("played_at", QDateTime::currentSecsSinceEpoch());
+                recentlyPlayed.append(item);
+            }
         }
     }
 
@@ -431,6 +492,9 @@ QJsonObject OpenKJEmbeddedApi::commandGetRequests()
     out.insert("error", "false");
     out.insert("serial", m_settings.embeddedApiSerial());
     out.insert("requests", requests);
+    out.insert("now_playing", nowPlaying);
+    out.insert("up_next", upNext);
+    out.insert("recently_played", recentlyPlayed);
     return out;
 }
 
@@ -473,6 +537,80 @@ QJsonObject OpenKJEmbeddedApi::commandSetAccepting(const QJsonObject &payload)
     out.insert("accepting", accepting);
     out.insert("serial", m_settings.embeddedApiSerial());
     return out;
+}
+
+QJsonObject OpenKJEmbeddedApi::commandAdminAction(const QJsonObject &payload)
+{
+    const QString action = payload.value("action").toString().trimmed();
+    if (action.isEmpty()) {
+        return QJsonObject{{"command", "adminAction"}, {"error", "true"}, {"errorString", "Missing action"}};
+    }
+
+    bool success = false;
+    if (action == "remove_song") {
+        success = removeQueueSongById(payload.value("request_id").toVariant().toInt());
+    } else if (action == "move_song_up") {
+        success = moveQueueSongByOffset(payload.value("request_id").toVariant().toInt(), -1);
+    } else if (action == "move_song_down") {
+        success = moveQueueSongByOffset(payload.value("request_id").toVariant().toInt(), 1);
+    } else if (action == "set_key_change") {
+        int requestId = payload.value("request_id").toVariant().toInt();
+        if (requestId <= 0) {
+            QSqlQuery query;
+            query.prepare("SELECT qsongid FROM queuesongs WHERE singer = :singer AND played = 0 ORDER BY position LIMIT 1");
+            query.bindValue(":singer", currentSingerId());
+            if (query.exec() && query.next()) {
+                requestId = query.value(0).toInt();
+            }
+        }
+        success = requestId > 0 && setQueueSongKey(requestId, payload.value("value").toInt());
+    } else if (action == "skip_song") {
+        const int singerId = currentSingerId();
+        success = false;
+        if (singerId >= 0) {
+            QSqlQuery query;
+            query.prepare("SELECT qsongid FROM queuesongs WHERE singer = :singer AND played = 0 ORDER BY position LIMIT 1");
+            query.bindValue(":singer", singerId);
+            if (query.exec() && query.next()) {
+                QSqlQuery upd;
+                upd.prepare("UPDATE queuesongs SET played = 1 WHERE qsongid = :id");
+                upd.bindValue(":id", query.value(0).toInt());
+                success = upd.exec();
+            }
+        }
+    } else if (action == "rotation_next") {
+        const int nextId = nextSingerId(1);
+        if (nextId >= 0) {
+            m_settings.setCurrentRotationPosition(nextId);
+            success = true;
+        }
+    } else if (action == "rotation_previous") {
+        const int prevId = nextSingerId(-1);
+        if (prevId >= 0) {
+            m_settings.setCurrentRotationPosition(prevId);
+            success = true;
+        }
+    } else if (action == "set_volume") {
+        m_settings.setAudioVolume(std::clamp(payload.value("value").toInt(60), 0, 100));
+        success = true;
+    } else if (action == "lock_queue") {
+        setAccepting(false);
+        success = true;
+    } else if (action == "unlock_queue") {
+        setAccepting(true);
+        success = true;
+    }
+
+    if (!success) {
+        return QJsonObject{
+            {"command", "adminAction"},
+            {"error", "true"},
+            {"errorString", QString("Action failed or unsupported: %1").arg(action)}
+        };
+    }
+
+    nextSerial();
+    return QJsonObject{{"command", "adminAction"}, {"error", "false"}, {"serial", m_settings.embeddedApiSerial()}};
 }
 
 QByteArray OpenKJEmbeddedApi::jsonResponse(const int statusCode, const QJsonObject &object) const
@@ -594,4 +732,102 @@ void OpenKJEmbeddedApi::normalizeSingerQueuePositions(const int singerId)
         upd.exec();
     }
     tx.exec("COMMIT");
+}
+
+bool OpenKJEmbeddedApi::moveQueueSongByOffset(const int qsongId, const int offset)
+{
+    QSqlQuery find;
+    find.prepare("SELECT singer, position FROM queuesongs WHERE qsongid = :id LIMIT 1");
+    find.bindValue(":id", qsongId);
+    if (!find.exec() || !find.next()) {
+        return false;
+    }
+
+    const int singerId = find.value(0).toInt();
+    const int oldPos = find.value(1).toInt();
+    const int newPos = oldPos + offset;
+    if (newPos < 0) {
+        return false;
+    }
+
+    QSqlQuery countQ;
+    countQ.prepare("SELECT COUNT(1) FROM queuesongs WHERE singer = :singer");
+    countQ.bindValue(":singer", singerId);
+    int count = 0;
+    if (countQ.exec() && countQ.next()) {
+        count = countQ.value(0).toInt();
+    }
+    if (newPos >= count) {
+        return false;
+    }
+
+    QSqlQuery tx;
+    tx.exec("BEGIN TRANSACTION");
+    if (offset < 0) {
+        QSqlQuery shift;
+        shift.prepare("UPDATE queuesongs SET position = position + 1 WHERE singer = :singer AND position >= :newPos AND position < :oldPos");
+        shift.bindValue(":singer", singerId);
+        shift.bindValue(":newPos", newPos);
+        shift.bindValue(":oldPos", oldPos);
+        shift.exec();
+    } else {
+        QSqlQuery shift;
+        shift.prepare("UPDATE queuesongs SET position = position - 1 WHERE singer = :singer AND position <= :newPos AND position > :oldPos");
+        shift.bindValue(":singer", singerId);
+        shift.bindValue(":newPos", newPos);
+        shift.bindValue(":oldPos", oldPos);
+        shift.exec();
+    }
+
+    QSqlQuery upd;
+    upd.prepare("UPDATE queuesongs SET position = :newPos WHERE qsongid = :id");
+    upd.bindValue(":newPos", newPos);
+    upd.bindValue(":id", qsongId);
+    const bool ok = upd.exec();
+    tx.exec(ok ? "COMMIT" : "ROLLBACK");
+
+    if (ok && m_queueModel.getSingerId() == singerId) {
+        m_queueModel.loadSinger(singerId);
+    }
+    return ok;
+}
+
+bool OpenKJEmbeddedApi::setQueueSongKey(const int qsongId, const int keyChange)
+{
+    QSqlQuery query;
+    query.prepare("UPDATE queuesongs SET keychg = :key WHERE qsongid = :id");
+    query.bindValue(":key", std::clamp(keyChange, -12, 12));
+    query.bindValue(":id", qsongId);
+    return query.exec();
+}
+
+int OpenKJEmbeddedApi::currentSingerId() const
+{
+    return m_settings.currentRotationPosition();
+}
+
+int OpenKJEmbeddedApi::nextSingerId(const int direction) const
+{
+    QSqlQuery query;
+    query.exec("SELECT singerid, position FROM rotationsingers ORDER BY position ASC");
+
+    QList<QPair<int, int>> singers;
+    while (query.next()) {
+        singers.append({query.value(0).toInt(), query.value(1).toInt()});
+    }
+    if (singers.isEmpty()) {
+        return -1;
+    }
+
+    const int curId = currentSingerId();
+    int idx = 0;
+    for (int i = 0; i < singers.size(); ++i) {
+        if (singers.at(i).first == curId) {
+            idx = i;
+            break;
+        }
+    }
+
+    const int nextIdx = (idx + direction + singers.size()) % singers.size();
+    return singers.at(nextIdx).first;
 }
