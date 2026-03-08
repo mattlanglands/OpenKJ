@@ -25,6 +25,7 @@
 #include <QMessageBox>
 #include "okjsongbookapi.h"
 #include <QProgressDialog>
+#include <QSqlQuery>
 #include "src/models/tableviewtooltipfilter.h"
 #include "dlgvideopreview.h"
 
@@ -562,9 +563,77 @@ void DlgRequests::requestsChanged(OkjsRequests requests) {
                               request.artist.toStdString(),
                               request.title.toStdString()
             );
+            if (!autoImportRequest(request)) {
+                m_reqLogger->warn("RequestID: {} | Auto-import failed; leaving request for manual handling",
+                                  request.requestId);
+            }
             m_reqLogger->flush();
 
         }
     }
     m_prevRequestList = curRequestsList;
+}
+
+bool DlgRequests::autoImportRequest(const OkjsRequest &request)
+{
+    const auto songId = findSongIdForRequest(request.artist.trimmed(), request.title.trimmed());
+    if (!songId.has_value()) {
+        m_reqLogger->warn("RequestID: {} | Auto-import could not find song in dbsongs | Song: {} - {}",
+                          request.requestId,
+                          request.artist.toStdString(),
+                          request.title.toStdString());
+        return false;
+    }
+
+    const QString singerName = toMixedCase(request.singer.trimmed());
+    if (singerName.isEmpty()) {
+        m_reqLogger->warn("RequestID: {} | Auto-import failed due to empty singer name", request.requestId);
+        return false;
+    }
+
+    int singerId = -1;
+    if (rotModel.singerExists(singerName)) {
+        singerId = rotModel.getSingerByName(singerName).id;
+    } else {
+        singerId = rotModel.singerAdd(singerName, m_settings.lastSingerAddPositionType());
+    }
+
+    emit addRequestSong(songId.value(), singerId, request.key);
+    songbookApi.removeRequest(request.requestId);
+    m_reqLogger->info("RequestID: {} | Auto-imported to rotation | Singer: {} | SongID: {} | Key: {}",
+                      request.requestId,
+                      singerName.toStdString(),
+                      songId.value(),
+                      request.key);
+    return true;
+}
+
+std::optional<int> DlgRequests::findSongIdForRequest(const QString &artist, const QString &title)
+{
+    QSqlQuery query;
+    query.prepare(
+            "SELECT songid FROM dbsongs "
+            "WHERE artist = :artist AND title = :title "
+            "AND discid != '!!DROPPED!!' AND discid != '!!BAD!!' "
+            "ORDER BY songid LIMIT 1");
+    query.bindValue(":artist", artist);
+    query.bindValue(":title", title);
+    if (query.exec() && query.next()) {
+        return query.value(0).toInt();
+    }
+
+    QSqlQuery fallback;
+    fallback.prepare(
+            "SELECT songid FROM dbsongs "
+            "WHERE lower(trim(artist)) = lower(trim(:artist)) "
+            "AND lower(trim(title)) = lower(trim(:title)) "
+            "AND discid != '!!DROPPED!!' AND discid != '!!BAD!!' "
+            "ORDER BY songid LIMIT 1");
+    fallback.bindValue(":artist", artist);
+    fallback.bindValue(":title", title);
+    if (fallback.exec() && fallback.next()) {
+        return fallback.value(0).toInt();
+    }
+
+    return std::nullopt;
 }
