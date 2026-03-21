@@ -38,6 +38,39 @@
     #include <sysinfoapi.h>
 #endif
 
+QString Settings::modeScopedKey(const QString &key, const int mode) const
+{
+    const QString prefix = (mode == LocalMode) ? "localMode/" : "classicMode/";
+    return prefix + key;
+}
+
+QVariant Settings::scopedValue(const QString &key,
+                               const QVariant &defaultValue,
+                               const bool fallbackLegacy,
+                               int mode) const
+{
+    if (mode < 0) {
+        mode = static_cast<int>(appMode());
+    }
+
+    const QString scoped = modeScopedKey(key, mode);
+    if (settings->contains(scoped)) {
+        return settings->value(scoped, defaultValue);
+    }
+    if (fallbackLegacy && settings->contains(key)) {
+        return settings->value(key, defaultValue);
+    }
+    return defaultValue;
+}
+
+void Settings::setScopedValue(const QString &key, const QVariant &value, int mode)
+{
+    if (mode < 0) {
+        mode = static_cast<int>(appMode());
+    }
+    settings->setValue(modeScopedKey(key, mode), value);
+}
+
 
 
 bool Settings::lastStartupOk() const
@@ -893,20 +926,40 @@ bool Settings::tickerShowRotationInfo()
     return settings->value("tickerShowRotationInfo", true).toBool();
 }
 
+Settings::AppMode Settings::appMode() const
+{
+    return static_cast<AppMode>(settings->value("appMode", ClassicMode).toInt());
+}
+
+void Settings::setAppMode(const AppMode mode)
+{
+    settings->setValue("appMode", static_cast<int>(mode));
+    emit appModeChanged(mode);
+}
+
+QString Settings::appModeName() const
+{
+    return appMode() == LocalMode ? "Local Mode" : "Classic";
+}
+
 bool Settings::requestServerEnabled()
 {
-    return settings->value("requestServerEnabled", false).toBool();
+    const bool defaultValue = appMode() == ClassicMode;
+    return scopedValue("requestServerEnabled", defaultValue, true).toBool();
 }
 
 void Settings::setRequestServerEnabled(bool enable)
 {
-    settings->setValue("requestServerEnabled", enable);
+    setScopedValue("requestServerEnabled", enable);
     emit requestServerEnabledChanged(enable);
 }
 
 QString Settings::requestServerUrl()
 {
-    QString url = settings->value("requestServerUrl", "https://api.okjsongbook.com").toString();
+    const QString defaultUrl = appMode() == LocalMode
+        ? QString("http://127.0.0.1:%1/api.php").arg(embeddedApiPort())
+        : QString("https://api.okjsongbook.com");
+    QString url = scopedValue("requestServerUrl", defaultUrl, true).toString();
     if (url == "https://songbook.openkj.org/api")
     {
         url = "https://api.okjsongbook.com";
@@ -917,38 +970,38 @@ QString Settings::requestServerUrl()
 
 void Settings::setRequestServerUrl(QString url)
 {
-    settings->setValue("requestServerUrl", url);
+    setScopedValue("requestServerUrl", url);
 }
 
 int Settings::requestServerVenue()
 {
-    return settings->value("requestServerVenue", 0).toInt();
+    return scopedValue("requestServerVenue", 0, true).toInt();
 }
 
 void Settings::setRequestServerVenue(int venueId)
 {
-    settings->setValue("requestServerVenue", venueId);
+    setScopedValue("requestServerVenue", venueId);
     emit requestServerVenueChanged(venueId);
 }
 
 QString Settings::requestServerApiKey()
 {
-    return settings->value("requestServerApiKey","").toString();
+    return scopedValue("requestServerApiKey", "", true).toString();
 }
 
 void Settings::setRequestServerApiKey(QString apiKey)
 {
-    settings->setValue("requestServerApiKey", apiKey);
+    setScopedValue("requestServerApiKey", apiKey);
 }
 
 bool Settings::requestServerIgnoreCertErrors()
 {
-    return settings->value("requestServerIgnoreCertErrors", false).toBool();
+    return scopedValue("requestServerIgnoreCertErrors", false, true).toBool();
 }
 
 void Settings::setRequestServerIgnoreCertErrors(bool ignore)
 {
-    settings->setValue("requestServerIgnoreCertErrors", ignore);
+    setScopedValue("requestServerIgnoreCertErrors", ignore);
 }
 
 bool Settings::audioUseFader()
@@ -1302,18 +1355,18 @@ void Settings::setEqBLevel(int band, int level)
 
 void Settings::setRequestServerInterval(int interval)
 {
-    settings->setValue("requestServerInterval", interval);
+    setScopedValue("requestServerInterval", interval);
     emit requestServerIntervalChanged(interval);
 }
 
 void Settings::setEmbeddedApiAccepting(bool accepting)
 {
-    settings->setValue("embeddedApiAccepting", accepting);
+    setScopedValue("embeddedApiAccepting", accepting, LocalMode);
 }
 
 void Settings::setEmbeddedApiSerial(int serial)
 {
-    settings->setValue("embeddedApiSerial", serial);
+    setScopedValue("embeddedApiSerial", serial, LocalMode);
 }
 
 void Settings::setTickerShowRotationInfo(bool show)
@@ -1615,17 +1668,57 @@ int Settings::getEqBLevel(int band)
 
 int Settings::requestServerInterval()
 {
-    return settings->value("requestServerInterval", 30).toInt();
+    return scopedValue("requestServerInterval", 30, true).toInt();
+}
+
+bool Settings::embeddedApiEnabled()
+{
+    return scopedValue("embeddedApiEnabled", appMode() == LocalMode, false, LocalMode).toBool();
 }
 
 bool Settings::embeddedApiAccepting()
 {
-    return settings->value("embeddedApiAccepting", true).toBool();
+    return scopedValue("embeddedApiAccepting", true, true, LocalMode).toBool();
 }
 
 int Settings::embeddedApiSerial()
 {
-    return settings->value("embeddedApiSerial", 1).toInt();
+    return scopedValue("embeddedApiSerial", 1, true, LocalMode).toInt();
+}
+
+int Settings::embeddedApiPort()
+{
+    return scopedValue("embeddedApiPort", 5050, false, LocalMode).toInt();
+}
+
+QString Settings::embeddedApiBindAddress()
+{
+    return scopedValue("embeddedApiBindAddress", "0.0.0.0", false, LocalMode).toString();
+}
+
+void Settings::setEmbeddedApiEnabled(bool enabled)
+{
+    setScopedValue("embeddedApiEnabled", enabled, LocalMode);
+}
+
+void Settings::setEmbeddedApiPort(int port)
+{
+    setScopedValue("embeddedApiPort", port, LocalMode);
+}
+
+void Settings::setEmbeddedApiBindAddress(const QString &address)
+{
+    setScopedValue("embeddedApiBindAddress", address, LocalMode);
+}
+
+QString Settings::localUiUrl()
+{
+    return scopedValue("localUiUrl", "http://127.0.0.1:3330", false, LocalMode).toString();
+}
+
+void Settings::setLocalUiUrl(const QString &url)
+{
+    setScopedValue("localUiUrl", url, LocalMode);
 }
 
 bool Settings::bmKCrossFade()
@@ -1784,12 +1877,12 @@ SfxEntry::SfxEntry()
 
 int Settings::systemId()
 {
-    return settings->value("systemId", 1).toInt();
+    return scopedValue("systemId", 1, true).toInt();
 }
 
 void Settings::setSystemId(int id)
 {
-    return settings->setValue("systemId", id);
+    setScopedValue("systemId", id);
 }
 
 void Settings::setCdgRemainEnabled(bool enabled)

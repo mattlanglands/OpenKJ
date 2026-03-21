@@ -19,15 +19,15 @@ jobs:
         submodules: recursive
 
     - name: install deps
-      run: brew install cmake ninja pkgconf cppunit utf8cpp qt@5 gstreamer
+      run: brew install cmake ninja pkgconf cppunit utf8cpp qt gstreamer
 
     - name: Build
       env:
-        LDFLAGS: "-L/opt/homebrew/opt/qt@5/lib"
-        CPPFLAGS: "-I/opt/homebrew/opt/qt@5/include"
-        PKG_CONFIG_PATH: "/opt/homebrew/opt/qt@5/lib/pkgconfig"
-        QT_DIR: "/opt/homebrew/opt/qt@5/"
-        Qt5_DIR: "/opt/homebrew/opt/qt@5/"
+        LDFLAGS: "-L/opt/homebrew/opt/qt/lib"
+        CPPFLAGS: "-I/opt/homebrew/opt/qt/include"
+        PKG_CONFIG_PATH: "/opt/homebrew/opt/qt/lib/pkgconfig"
+        QT_DIR: "/opt/homebrew/opt/qt/"
+        Qt6_DIR: "/opt/homebrew/opt/qt/"
       run: |
         cmake -DSPDLOG_USE_BUNDLED=true . -B build -G Ninja
         ninja -C build

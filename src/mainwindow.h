@@ -124,6 +124,7 @@ private:
     AudioRecorder audioRecorder;
     QLabel m_labelSingerCount;
     QLabel m_labelRotationDuration;
+    QLabel m_labelAppMode;
     QTimer m_timerKaraokeAA;
     QTimer m_timerSlowUiUpdate;
     QTimer m_timerTest;
@@ -164,6 +165,8 @@ private:
     std::mt19937_64 rng;
 
     void updateIcons();
+    void applyModernWidgetStyle();
+    void refreshModeAwareLabels();
     void setupShortcuts();
     void setupConnections();
     void loadSettings();

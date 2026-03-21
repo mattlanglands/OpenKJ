@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5...3.10)
+cmake_minimum_required(VERSION 3.24)
 
 file(READ "src/okjversion.h" vercontents)
 string(REGEX MATCH "OKJ_VERSION_MAJOR ([0-9]*)" _ ${vercontents})
@@ -27,8 +27,7 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(QT NAMES Qt5 COMPONENTS Widgets REQUIRED)
-find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Gui Sql Network Widgets Concurrent Svg PrintSupport REQUIRED)
+find_package(Qt6 REQUIRED COMPONENTS Gui Sql Network Widgets Concurrent Svg PrintSupport)
 
 include_directories(
         src/
@@ -575,14 +574,14 @@ set(SOURCE_FILES
 
 set(LIBRARIES
         spdlog
-        Qt5::Widgets
-        Qt5::Core
-        Qt5::Gui
-        Qt5::Sql
-        Qt5::Network
-        Qt5::Svg
-        Qt5::PrintSupport
-        Qt5::Concurrent
+        Qt6::Widgets
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Sql
+        Qt6::Network
+        Qt6::Svg
+        Qt6::PrintSupport
+        Qt6::Concurrent
         )
 
 
@@ -647,15 +646,15 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
             ${GSTREAMER_FRAMEWORK}
             )
     if (NOT DEFINED BUILDONLY)
-        get_target_property(_qt5_qmake_location Qt5::qmake IMPORTED_LOCATION)
+        get_target_property(_qt6_qmake_location Qt6::qmake IMPORTED_LOCATION)
         execute_process(
-                COMMAND "${_qt5_qmake_location}" -query QT_INSTALL_PREFIX
+                COMMAND "${_qt6_qmake_location}" -query QT_INSTALL_PREFIX
                 RESULT_VARIABLE return_code
-                OUTPUT_VARIABLE qt5_install_prefix
+                OUTPUT_VARIABLE qt6_install_prefix
                 OUTPUT_STRIP_TRAILING_WHITESPACE
         )
-        if (qt5_install_prefix)
-            find_program(MACDEPLOYQT macdeployqt HINTS ${qt5_install_prefix} PATH_SUFFIXES bin)
+        if (qt6_install_prefix)
+            find_program(MACDEPLOYQT macdeployqt HINTS ${qt6_install_prefix} PATH_SUFFIXES bin)
             if (MACDEPLOYQT)
                 if (DEFINED MAC_SIGNING_IDENTITY)
                     add_custom_command(
@@ -739,16 +738,16 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
     )
 
     if (DEFINED DEPLOY_DEPS)
-        get_target_property(_qt5_qmake_location Qt5::qmake IMPORTED_LOCATION)
+        get_target_property(_qt6_qmake_location Qt6::qmake IMPORTED_LOCATION)
         execute_process(
-                COMMAND "${_qt5_qmake_location}" -query QT_INSTALL_PREFIX
+                COMMAND "${_qt6_qmake_location}" -query QT_INSTALL_PREFIX
                 RESULT_VARIABLE return_code
-                OUTPUT_VARIABLE qt5_install_prefix
+                OUTPUT_VARIABLE qt6_install_prefix
                 OUTPUT_STRIP_TRAILING_WHITESPACE
         )
         install(DIRECTORY "${GST_BASE_PATH}/bin/" DESTINATION "bin")
-        if (qt5_install_prefix)
-            find_program(WINDEPLOYQT windeployqt HINTS ${qt5_install_prefix} PATH_SUFFIXES bin)
+        if (qt6_install_prefix)
+            find_program(WINDEPLOYQT windeployqt HINTS ${qt6_install_prefix} PATH_SUFFIXES bin)
             if (WINDEPLOYQT)
                 add_custom_command(
                         TARGET openkj
@@ -770,4 +769,3 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
         )
     endif ()
 endif ()
-

@@ -707,12 +707,15 @@ QPushButton:default {
                    <number>0</number>
                   </property>
                   <item>
-                   <widget class="QLabel" name="labelNoSinger">
+                    <widget class="QLabel" name="labelNoSinger">
                     <property name="text">
-                     <string>No singer selected</string>
+                     <string>Select a singer to view their queue.</string>
                     </property>
                     <property name="alignment">
                      <set>Qt::AlignCenter</set>
+                    </property>
+                    <property name="wordWrap">
+                     <bool>true</bool>
                     </property>
                    </widget>
                   </item>
@@ -3473,7 +3476,7 @@ QPushButton:default {
   </action>
   <action name="actionManage_DB">
    <property name="text">
-    <string>Manage Karaoke DB</string>
+    <string>Manage Library</string>
    </property>
   </action>
   <action name="actionRegulars">
@@ -3483,7 +3486,7 @@ QPushButton:default {
   </action>
   <action name="actionIncoming_Requests">
    <property name="text">
-    <string>Incoming Requests</string>
+    <string>Classic Requests</string>
    </property>
   </action>
   <action name="actionSettings">
@@ -3508,12 +3511,12 @@ QPushButton:default {
   </action>
   <action name="actionManage_Break_DB">
    <property name="text">
-    <string>Manage Break DB</string>
+    <string>Manage Break Library</string>
    </property>
   </action>
   <action name="actionManage_Karaoke_DB">
    <property name="text">
-    <string>Manage Karaoke DB</string>
+    <string>Manage Library</string>
    </property>
   </action>
   <action name="actionRegulars_2">
@@ -3523,7 +3526,7 @@ QPushButton:default {
   </action>
   <action name="actionIncoming_Requests_2">
    <property name="text">
-    <string>Incoming Requests</string>
+    <string>Classic Requests</string>
    </property>
   </action>
   <action name="actionDisplay_Metadata">
@@ -3572,7 +3575,7 @@ QPushButton:default {
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Autoplay mode</string>
+    <string>Autoplay Mode</string>
    </property>
   </action>
   <action name="actionSongbook_Generator">

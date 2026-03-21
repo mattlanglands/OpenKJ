@@ -52,8 +52,15 @@ class Settings : public QObject
 private:
     QSettings *settings;
     bool m_safeStartupMode{false};
+    QString modeScopedKey(const QString &key, int mode) const;
+    QVariant scopedValue(const QString &key, const QVariant &defaultValue, bool fallbackLegacy = true, int mode = -1) const;
+    void setScopedValue(const QString &key, const QVariant &value, int mode = -1);
 
 public:
+    enum AppMode {
+        ClassicMode = 0,
+        LocalMode = 1
+    };
     enum {
         LOG_LEVEL_DISABLED,
         LOG_LEVEL_CRITICAL,
@@ -147,6 +154,9 @@ public:
     QString tickerCustomString();
     void setTickerCustomString(const QString &value);
     bool tickerShowRotationInfo();
+    [[nodiscard]] AppMode appMode() const;
+    void setAppMode(AppMode mode);
+    [[nodiscard]] QString appModeName() const;
     bool requestServerEnabled();
     void setRequestServerEnabled(bool enable);
     QString requestServerUrl();
@@ -246,8 +256,16 @@ public:
     bool eqBBypass();
     int getEqBLevel(int band);
     int requestServerInterval();
+    bool embeddedApiEnabled();
     bool embeddedApiAccepting();
     int embeddedApiSerial();
+    int embeddedApiPort();
+    QString embeddedApiBindAddress();
+    void setEmbeddedApiEnabled(bool enabled);
+    void setEmbeddedApiPort(int port);
+    void setEmbeddedApiBindAddress(const QString &address);
+    QString localUiUrl();
+    void setLocalUiUrl(const QString &url);
     bool bmKCrossFade();
     bool requestRemoveOnRotAdd();
     bool requestDialogAutoShow();
@@ -310,6 +328,7 @@ signals:
     void showSongStopPauseWarningChanged(bool enabled);
     void requestServerIntervalChanged(int interval);
     void requestServerEnabledChanged(bool enabled);
+    void appModeChanged(AppMode mode);
     void rotationDisplayPositionChanged(bool show);
     void rotationDurationSettingsModified();
     void rotationShowNextSongChanged(bool show);

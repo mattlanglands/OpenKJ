@@ -26,6 +26,10 @@
 #include <QList>
 #include <QNetworkAccessManager>
 #include <QPushButton>
+#include <QComboBox>
+#include <QGroupBox>
+#include <QLineEdit>
+#include <QSpinBox>
 #include "settings.h"
 #include "mediabackend.h"
 #include "okjsongbookapi.h"
@@ -53,6 +57,13 @@ private:
     QNetworkAccessManager *networkManager;
     bool m_pageSetupDone;
     QStringList audioOutputDevices;
+    QComboBox *m_comboAppMode{nullptr};
+    QGroupBox *m_groupBoxLocalMode{nullptr};
+    QLineEdit *m_lineEditLocalUiUrl{nullptr};
+    QLineEdit *m_lineEditEmbeddedBindAddress{nullptr};
+    QSpinBox *m_spinBoxEmbeddedPort{nullptr};
+    void setupModeWidgets();
+    void refreshNetworkModeUi();
     void setupHotkeysForm();
     struct KeyboardShortcut
     {
@@ -104,6 +115,7 @@ signals:
     void rotationDurationSettingsModified();
     void rotationShowNextSongChanged(bool enabled);
     void requestServerEnableChanged(bool enabled);
+    void appModeChanged(Settings::AppMode mode);
     void videoOffsetChanged(int offsetMs);
 
 private slots:

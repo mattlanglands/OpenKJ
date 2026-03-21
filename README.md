@@ -32,6 +32,8 @@ A few features:
 * Remote request server integration allowing singers to look up and submit songs via the web or mobile apps
 * Automatic performance recording
 * Autoplay karaoke mode
+* Classic mode for legacy remote request workflows
+* Local Mode with embedded LAN API, local user accounts, and a mobile/admin web UI integration path
 * Lots of other little things
 
 It currently handles media+g zip files (zip files containing an mp3, wav, or ogg file and a cdg file) and paired mp3 and cdg files.  I'll be adding others in the future if anyone expresses interest.  It also can play non-cdg based video files (mkv, mp4, mpg, avi) for both break music and karaoke.
@@ -42,21 +44,40 @@ Database entries for the songs are based on the file naming scheme.  I've includ
 
 **Requirements to build OpenKJ:**
 
-* Qt 5.x
-* gstreamer 1.4 or above
+* Qt 6.x
+* CMake 3.24+
+* Current GStreamer 1.x development packages
 * spdlog
 * taglib
 
 **Linux**
 
-Build using cmake from the command line or in your IDE of choice
+Build using CMake from the command line or in your IDE of choice.
 
 **Mac**
 
-Building now works on OS X in Qt Creator using the native xcode compiler.  Use the latest stable version of the GStreamer SDK from http://gstreamer.freedesktop.org.
+macOS is supported as a developer compile-check environment. Install a Qt 6 toolchain, `cmake`, `pkg-config`, GStreamer, taglib, and spdlog before configuring.
 
 
 **Windows**
 
-Building now works on Windows in Qt Creator using the msvc build system (both 32 and 64 bit).  Use the latest stable version of the GStreamer SDK from http://gstreamer.freedesktop.org.  You will likely need to modify the paths in the OpenKJ.pro file to match your devel environment.  Installers can be found at http://openkj.org/ if you just want to run the software and not build it yourself or help out with development.
+Windows 11 x64 is the primary runtime and validation target. Use a Qt 6 kit that matches your compiler, current GStreamer SDK packages, and CMake/Ninja or Qt Creator.
 
+## Operating modes
+
+OpenKJ now separates request behavior into two modes:
+
+* `Classic`: legacy request-server workflow and existing openkj.org-compatible venue/account behavior
+* `Local Mode`: OpenKJ hosts an embedded LAN API for the separate Karaoke UI project and stores local users in the OpenKJ database
+
+## Local Mode API
+
+When Local Mode is active and the embedded API is enabled, OpenKJ serves:
+
+* `POST /api.php`
+* `POST /browse`
+* `GET /health`
+* `GET /stats`
+* `GET/POST /local/...` endpoints for queue, users, admin auth, capabilities, and event settings
+
+The separate Karaoke UI project remains standalone. OpenKJ provides the LAN API, while OpenKJ's own admin and configuration flow remains native.

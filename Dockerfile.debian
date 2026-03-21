@@ -7,9 +7,9 @@ RUN apt-get -qq update && \
 	apt-get -qq -y install \
 	cmake \
 	ninja-build \
-	qtbase5-dev \
-	libqt5svg5-dev \
-	qtmultimedia5-dev \
+	qt6-base-dev \
+	qt6-svg-dev \
+	qt6-webengine-dev \
 	libgstreamer1.0-dev \
 	libtagc0-dev \
 	libspdlog-dev \
@@ -21,4 +21,3 @@ COPY ./ /openkj/
 WORKDIR /openkj/
 RUN cmake -DSPDLOG_USE_BUNDLED=true . -B build -G Ninja
 RUN ninja -C build
-

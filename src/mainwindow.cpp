@@ -123,6 +123,85 @@ void MainWindow::updateIcons() {
     treatAllSingersAsRegsChanged(m_settings.treatAllSingersAsRegs());
 }
 
+void MainWindow::applyModernWidgetStyle()
+{
+    setStyleSheet(R"(
+        QMainWindow, QDialog {
+            background: palette(window);
+        }
+        QTabWidget::pane {
+            border: 1px solid rgba(127,127,127,0.28);
+            border-radius: 8px;
+            top: -1px;
+        }
+        QTabBar::tab {
+            padding: 8px 14px;
+            margin: 2px;
+            border-radius: 6px;
+            min-height: 22px;
+        }
+        QGroupBox {
+            font-weight: 600;
+            border: 1px solid rgba(127,127,127,0.24);
+            border-radius: 8px;
+            margin-top: 12px;
+            padding-top: 10px;
+        }
+        QGroupBox::title {
+            left: 10px;
+            padding: 0 4px;
+        }
+        QPushButton {
+            min-height: 28px;
+            padding: 4px 10px;
+            border-radius: 6px;
+        }
+        QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QFontComboBox {
+            min-height: 28px;
+            padding: 3px 8px;
+            border-radius: 6px;
+        }
+        QTableView, QTreeView {
+            alternate-background-color: rgba(127,127,127,0.05);
+            gridline-color: rgba(127,127,127,0.10);
+            border: 1px solid rgba(127,127,127,0.18);
+            border-radius: 8px;
+        }
+        QHeaderView::section {
+            padding: 6px 8px;
+            border: 0;
+            border-bottom: 1px solid rgba(127,127,127,0.18);
+            background: rgba(127,127,127,0.08);
+            font-weight: 600;
+        }
+        QLabel {
+            padding: 1px 0;
+        }
+    )");
+}
+
+void MainWindow::refreshModeAwareLabels()
+{
+    const bool classicMode = m_settings.appMode() == Settings::ClassicMode;
+    ui->menuKaraoke->setTitle(classicMode ? "Classic Karaoke" : "Karaoke");
+    ui->actionIncoming_Requests->setText(classicMode ? "Classic Requests" : "Requests");
+    ui->pushButtonIncomingRequests->setText(classicMode ? "Classic Requests" : "Requests");
+    ui->pushButtonIncomingRequests->setToolTip(classicMode
+        ? "Open the Classic requests window"
+        : "Requests are handled through Local Mode mobile and admin surfaces");
+    ui->gbxQueue->setTitle("Queue");
+    ui->groupBox_3->setTitle(classicMode ? "Song Library" : "Library");
+    ui->rotgroupBox_2->setTitle("Singers");
+    ui->labelNoSinger->setText(classicMode
+        ? "Select a singer to view their queue."
+        : "Select a singer to review and adjust their queue.");
+    ui->labelSingerHeader->setText("Singer");
+    ui->labelArtistHeader->setText("Artist");
+    ui->labelTitleHeader->setText("Title");
+    m_labelAppMode.setText(QString("Mode: %1").arg(m_settings.appModeName()));
+    ui->actionIncoming_Requests->setVisible(classicMode);
+}
+
 void MainWindow::setupShortcuts() {
 
     m_scutKSelectNextSinger.setKey(m_settings.loadShortcutKeySequence("kSelectNextSinger"));
@@ -583,6 +662,8 @@ MainWindow::MainWindow(QWidget *parent) :
     QCoreApplication::setOrganizationDomain("OpenKJ.org");
     QCoreApplication::setApplicationName("OpenKJ");
     ui->setupUi(this);
+    applyModernWidgetStyle();
+    refreshModeAwareLabels();
     setMouseTracking(true);
     m_songShop = std::make_unique<SongShop>(this);
     m_lazyDurationUpdater = std::make_unique<LazyDurationUpdateController>(this);
@@ -676,6 +757,10 @@ MainWindow::MainWindow(QWidget *parent) :
     m_rotModel.setHeaderData(3, Qt::Horizontal, "");
     m_rotModel.setHeaderData(4, Qt::Horizontal, "");
     m_logger->info("{} Adding singer count to status bar", m_loggingPrefix);
+    m_labelAppMode.setMargin(4);
+    m_labelSingerCount.setMargin(4);
+    m_labelRotationDuration.setMargin(4);
+    ui->statusBar->addPermanentWidget(&m_labelAppMode);
     ui->statusBar->addWidget(&m_labelSingerCount);
     ui->statusBar->addWidget(&m_labelRotationDuration);
     m_tableModelPlaylists = std::make_unique<QSqlTableModel>(this, m_database);
@@ -725,16 +810,26 @@ MainWindow::MainWindow(QWidget *parent) :
     setupShortcuts();
     setupConnections();
 
-    if (!m_embeddedApi.start(5050)) {
-        m_logger->error("{} Failed to start embedded API server on port 5050", m_loggingPrefix);
-    } else {
-        m_logger->info("{} Embedded API server listening on port 5050", m_loggingPrefix);
+    if (m_settings.appMode() == Settings::LocalMode && m_settings.embeddedApiEnabled()) {
+        const QHostAddress bindAddress(m_settings.embeddedApiBindAddress());
+        if (!m_embeddedApi.start(static_cast<quint16>(m_settings.embeddedApiPort()), bindAddress)) {
+            m_logger->error("{} Failed to start embedded API server on {}:{}",
+                            m_loggingPrefix,
+                            m_settings.embeddedApiBindAddress().toStdString(),
+                            m_settings.embeddedApiPort());
+        } else {
+            m_logger->info("{} Embedded API server listening on {}:{}",
+                           m_loggingPrefix,
+                           m_settings.embeddedApiBindAddress().toStdString(),
+                           m_settings.embeddedApiPort());
+        }
     }
 
     m_timerSlowUiUpdate.start(10000);
 }
 
 void MainWindow::loadSettings() {
+    refreshModeAwareLabels();
     if (m_settings.theme() != 0) {
         ui->pushButtonIncomingRequests->setStyleSheet("");
         update();
@@ -783,7 +878,7 @@ void MainWindow::loadSettings() {
         m_mediaBackendKar.setEqLevel(band, m_settings.getEqKLevel(band));
         m_mediaBackendBm.setEqLevel(band, m_settings.getEqBLevel(band));
     }
-    ui->pushButtonIncomingRequests->setVisible(m_settings.requestServerEnabled());
+    ui->pushButtonIncomingRequests->setVisible(m_settings.appMode() == Settings::ClassicMode && m_settings.requestServerEnabled());
     ui->btnToggleCdgWindow->setChecked(m_settings.showCdgWindow());
     ui->groupBoxNowPlaying->setVisible(m_settings.showMainWindowNowPlaying());
     ui->groupBoxSoundClips->setVisible(m_settings.showMainWindowSoundClips());
@@ -1199,6 +1294,17 @@ void MainWindow::dbInit(const QDir &okjDataDir) {
     query.exec(
             "CREATE TABLE IF NOT EXISTS bmplsongs ( plsongid INTEGER PRIMARY KEY AUTOINCREMENT, playlist INT, position INT, Artist INT, Title INT, Filename INT, Duration INT, path INT)");
     query.exec("CREATE TABLE IF NOT EXISTS bmsrcdirs ( path NOT NULL)");
+    query.exec(
+            "CREATE TABLE IF NOT EXISTS local_users ( username_normalized TEXT PRIMARY KEY, username TEXT NOT NULL, password_hash BLOB NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)");
+    query.exec(
+            "CREATE TABLE IF NOT EXISTS local_user_sessions ( token TEXT PRIMARY KEY, username_normalized TEXT NOT NULL, expires_at INTEGER NOT NULL)");
+    query.exec(
+            "CREATE TABLE IF NOT EXISTS local_admin_sessions ( token TEXT PRIMARY KEY, expires_at INTEGER NOT NULL)");
+    query.exec(
+            "CREATE TABLE IF NOT EXISTS local_request_owners ( request_id INTEGER PRIMARY KEY, username_normalized TEXT NOT NULL)");
+    query.exec(
+            "CREATE TABLE IF NOT EXISTS local_event_settings ( settings_id INTEGER PRIMARY KEY CHECK(settings_id = 1), app_name TEXT NOT NULL DEFAULT 'OpenKJ', tagline TEXT NOT NULL DEFAULT '')");
+    query.exec("INSERT OR IGNORE INTO local_event_settings (settings_id, app_name, tagline) VALUES (1, 'OpenKJ', '')");
     query.exec("PRAGMA synchronous=OFF");
     query.exec("PRAGMA cache_size=300000");
     query.exec("PRAGMA temp_store=2");
@@ -1758,8 +1864,21 @@ void MainWindow::actionSettingsTriggered() {
         m_mediaBackendKar.setVideoOffset(offsetMs);
         m_mediaBackendBm.setVideoOffset(offsetMs);
     });
-    connect(settingsDialog, &DlgSettings::requestServerEnableChanged, ui->pushButtonIncomingRequests,
-            &QPushButton::setVisible);
+    connect(settingsDialog, &DlgSettings::requestServerEnableChanged, this, [&]() {
+        ui->pushButtonIncomingRequests->setVisible(
+            m_settings.appMode() == Settings::ClassicMode && m_settings.requestServerEnabled());
+        refreshModeAwareLabels();
+    });
+    connect(settingsDialog, &DlgSettings::appModeChanged, this, [&](auto mode) {
+        ui->pushButtonIncomingRequests->setVisible(
+            mode == Settings::ClassicMode && m_settings.requestServerEnabled());
+        refreshModeAwareLabels();
+        m_embeddedApi.stop();
+        if (mode == Settings::LocalMode && m_settings.embeddedApiEnabled()) {
+            m_embeddedApi.start(static_cast<quint16>(m_settings.embeddedApiPort()),
+                                QHostAddress(m_settings.embeddedApiBindAddress()));
+        }
+    });
     connect(settingsDialog, &DlgSettings::rotationShowNextSongChanged, [&]() { autosizeRotationCols(); });
     connect(settingsDialog, &DlgSettings::rotationDurationSettingsModified, this, &MainWindow::updateRotationDuration);
     connect(settingsDialog, &DlgSettings::requestServerIntervalChanged, &m_songbookApi, &OKJSongbookAPI::setInterval);
@@ -1808,6 +1927,7 @@ void MainWindow::actionSettingsTriggered() {
 
     settingsDialog->show();
 }
+
 
 void MainWindow::songDroppedOnSinger(const int &singerId, const int &songId, const int &dropRow) {
     m_qModel.loadSinger(singerId);
@@ -2671,22 +2791,23 @@ void MainWindow::timerButtonFlashTimeout() {
             palette.setColor(QPalette::ButtonText, (flashed) ? normalTxt : blinkTxt);
             ui->pushButtonIncomingRequests->setPalette(palette);
             ui->pushButtonIncomingRequests->setText(
-                    " Requests (" + QString::number(requestsDialog->numRequests()) + ") ");
+                    QString("Requests (%1)").arg(requestsDialog->numRequests()));
             flashed = !flashed;
         } else {
             ui->pushButtonIncomingRequests->setText(
-                    " Requests (" + QString::number(requestsDialog->numRequests()) + ") ");
+                    QString("Requests (%1)").arg(requestsDialog->numRequests()));
             ui->pushButtonIncomingRequests->setStyleSheet((flashed) ? normalSS : blinkSS);
             flashed = !flashed;
         }
         update();
-    } else if (ui->pushButtonIncomingRequests->text() != "Requests") {
+    } else if (ui->pushButtonIncomingRequests->text() != "Requests" &&
+               ui->pushButtonIncomingRequests->text() != "Classic Requests") {
         if (m_settings.theme() != 0) {
             ui->pushButtonIncomingRequests->setPalette(this->palette());
-            ui->pushButtonIncomingRequests->setText("Requests");
+            refreshModeAwareLabels();
         } else {
             ui->pushButtonIncomingRequests->setStyleSheet(normalSS);
-            ui->pushButtonIncomingRequests->setText(" Requests ");
+            refreshModeAwareLabels();
         }
         update();
     }
@@ -3599,7 +3720,7 @@ void MainWindow::tableViewRotationCurrentChanged(const QModelIndex &cur, const Q
         ui->tabWidgetQueue->addTab(m_historyTabWidget, "History");
     }
     ui->gbxQueue->setTitle(
-            QString("Song Queue - " + cur.sibling(cur.row(), TableModelRotation::COL_NAME).data().toString()));
+            QString("Queue for " + cur.sibling(cur.row(), TableModelRotation::COL_NAME).data().toString()));
     if (!ui->tabWidgetQueue->isVisible()) {
         ui->tabWidgetQueue->setVisible(true);
         ui->labelNoSinger->setVisible(false);
@@ -3637,7 +3758,7 @@ void MainWindow::rotationSelectionChanged(const QItemSelection &selected, const 
         m_logger->trace("{} Rotation Selection Cleared!", m_loggingPrefix);
         m_qModel.loadSinger(-1);
         ui->tableViewRotation->reset();
-        ui->gbxQueue->setTitle("Song Queue");
+        ui->gbxQueue->setTitle("Queue");
         ui->tabWidgetQueue->setVisible(false);
         ui->labelNoSinger->setVisible(true);
     }
@@ -4405,7 +4526,3 @@ void MainWindow::showAddSingerDialog() {
     } else
         dlgAddSinger->raise();
 }
-
-
-
-

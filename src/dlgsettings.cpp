@@ -27,8 +27,11 @@
 #include <QFileDialog>
 #include <QStandardPaths>
 #include <QMessageBox>
+#include <QLabel>
+#include <QFormLayout>
 #include <QSqlQuery>
 #include <QtSql>
+#include <QVBoxLayout>
 #include <QXmlStreamWriter>
 #include <QNetworkReply>
 #include <QAuthenticator>
@@ -50,6 +53,42 @@ DlgSettings::DlgSettings(MediaBackend &AudioBackend, MediaBackend &BmAudioBacken
     networkManager = new QNetworkAccessManager(this);
     ui->setupUi(this);
     m_settings.restoreWindowState(this);
+    setStyleSheet(R"(
+        QDialog {
+            background: palette(window);
+        }
+        QTabWidget::pane {
+            border: 1px solid rgba(127,127,127,0.28);
+            border-radius: 8px;
+        }
+        QTabBar::tab {
+            padding: 8px 14px;
+            margin: 2px;
+            border-radius: 6px;
+            min-height: 22px;
+        }
+        QGroupBox {
+            font-weight: 600;
+            border: 1px solid rgba(127,127,127,0.24);
+            border-radius: 8px;
+            margin-top: 12px;
+            padding-top: 10px;
+        }
+        QGroupBox::title {
+            left: 10px;
+            padding: 0 4px;
+        }
+        QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QFontComboBox, QKeySequenceEdit {
+            min-height: 28px;
+            padding: 3px 8px;
+            border-radius: 6px;
+        }
+        QPushButton {
+            min-height: 28px;
+            padding: 4px 10px;
+            border-radius: 6px;
+        }
+    )");
     ui->checkBoxHardwareAccel->setChecked(m_settings.hardwareAccelEnabled());
     setFont(m_settings.applicationFont());
 #ifdef Q_OS_MACOS
@@ -82,6 +121,7 @@ DlgSettings::DlgSettings(MediaBackend &AudioBackend, MediaBackend &BmAudioBacken
     connect(ui->comboBoxConsoleLogLevel, qOverload<int>(&QComboBox::currentIndexChanged), this, &DlgSettings::comboBoxConsoleLogLevelChanged);
     connect(ui->comboBoxFileLogLevel, qOverload<int>(&QComboBox::currentIndexChanged), this, &DlgSettings::comboBoxFileLogLevelChanged);
     ui->tabWidgetMain->setCurrentIndex(0);
+    setupModeWidgets();
     ui->checkBoxDbSkipValidation->setChecked(m_settings.dbSkipValidation());
     ui->checkBoxLazyLoadDurations->setChecked(m_settings.dbLazyLoadDurations());
     ui->checkBoxMonitorDirs->setChecked(m_settings.dbDirectoryWatchEnabled());
@@ -285,6 +325,7 @@ DlgSettings::DlgSettings(MediaBackend &AudioBackend, MediaBackend &BmAudioBacken
     connect(ui->cbxRotShowNextSong, &QCheckBox::toggled, &m_settings, &Settings::setRotationShowNextSong);
     connect(ui->cbxRotShowNextSong, &QCheckBox::toggled, this, &DlgSettings::rotationShowNextSongChanged);
     setupHotkeysForm();
+    refreshNetworkModeUi();
     m_pageSetupDone = true;
 }
 
@@ -301,6 +342,79 @@ QStringList DlgSettings::getMonitors() {
                 << "Monitor " + QString::number(i) + " - " + QString::number(sWidth) + "x" + QString::number(sHeight);
     }
     return screenStrings;
+}
+
+void DlgSettings::setupModeWidgets()
+{
+    auto *networkLayout = qobject_cast<QVBoxLayout *>(ui->tabWidgetPage3->layout());
+    if (!networkLayout) {
+        return;
+    }
+
+    auto *modeBox = new QGroupBox(tr("Operating Mode"), ui->tabWidgetPage3);
+    auto *modeLayout = new QFormLayout(modeBox);
+    m_comboAppMode = new QComboBox(modeBox);
+    m_comboAppMode->addItem("Classic", Settings::ClassicMode);
+    m_comboAppMode->addItem("Local Mode", Settings::LocalMode);
+    m_comboAppMode->setCurrentIndex(m_settings.appMode() == Settings::LocalMode ? 1 : 0);
+    modeLayout->addRow(tr("Mode"), m_comboAppMode);
+    networkLayout->insertWidget(0, modeBox);
+
+    m_groupBoxLocalMode = new QGroupBox(tr("Local Mode"), ui->tabWidgetPage3);
+    auto *localLayout = new QFormLayout(m_groupBoxLocalMode);
+    m_lineEditLocalUiUrl = new QLineEdit(m_settings.localUiUrl(), m_groupBoxLocalMode);
+    m_lineEditEmbeddedBindAddress = new QLineEdit(m_settings.embeddedApiBindAddress(), m_groupBoxLocalMode);
+    m_spinBoxEmbeddedPort = new QSpinBox(m_groupBoxLocalMode);
+    m_spinBoxEmbeddedPort->setRange(1, 65535);
+    m_spinBoxEmbeddedPort->setValue(m_settings.embeddedApiPort());
+    localLayout->addRow(tr("Karaoke UI URL"), m_lineEditLocalUiUrl);
+    localLayout->addRow(tr("Embedded API bind"), m_lineEditEmbeddedBindAddress);
+    localLayout->addRow(tr("Embedded API port"), m_spinBoxEmbeddedPort);
+    networkLayout->insertWidget(1, m_groupBoxLocalMode);
+
+    connect(m_comboAppMode, qOverload<int>(&QComboBox::currentIndexChanged), this, [&](int index) {
+        const auto mode = static_cast<Settings::AppMode>(m_comboAppMode->itemData(index).toInt());
+        m_settings.setAppMode(mode);
+        ui->groupBoxRequestServer->setChecked(m_settings.requestServerEnabled());
+        ui->lineEditUrl->setText(m_settings.requestServerUrl());
+        ui->lineEditApiKey->setText(m_settings.requestServerApiKey());
+        ui->checkBoxIgnoreCertErrors->setChecked(m_settings.requestServerIgnoreCertErrors());
+        ui->spinBoxSystemId->setValue(m_settings.systemId());
+        ui->spinBoxInterval->setValue(m_settings.requestServerInterval());
+        m_lineEditLocalUiUrl->setText(m_settings.localUiUrl());
+        m_lineEditEmbeddedBindAddress->setText(m_settings.embeddedApiBindAddress());
+        m_spinBoxEmbeddedPort->setValue(m_settings.embeddedApiPort());
+        refreshNetworkModeUi();
+        emit appModeChanged(mode);
+    });
+    connect(m_lineEditLocalUiUrl, &QLineEdit::editingFinished, this, [&]() {
+        m_settings.setLocalUiUrl(m_lineEditLocalUiUrl->text().trimmed());
+    });
+    connect(m_lineEditEmbeddedBindAddress, &QLineEdit::editingFinished, this, [&]() {
+        m_settings.setEmbeddedApiBindAddress(m_lineEditEmbeddedBindAddress->text().trimmed());
+    });
+    connect(m_spinBoxEmbeddedPort, qOverload<int>(&QSpinBox::valueChanged), this, [&](int port) {
+        m_settings.setEmbeddedApiPort(port);
+    });
+}
+
+void DlgSettings::refreshNetworkModeUi()
+{
+    const bool classicMode = m_settings.appMode() == Settings::ClassicMode;
+    ui->groupBoxRequestServer->setTitle(classicMode ? tr("Classic requests") : tr("Classic compatibility"));
+    ui->label_6->setText(classicMode ? tr("Server URL") : tr("Classic server URL"));
+    ui->label_7->setText(classicMode ? tr("API key") : tr("Classic API key"));
+    ui->label_30->setText(classicMode ? tr("System ID") : tr("Classic system ID"));
+    ui->label_22->setText(classicMode ? tr("Refresh interval") : tr("Classic refresh interval"));
+    ui->lineEditUrl->setPlaceholderText(classicMode ? tr("https://api.okjsongbook.com/api.php")
+                                                    : tr("Classic mode server endpoint"));
+    ui->groupBoxRequestServer->setEnabled(classicMode);
+    ui->spinBoxSystemId->setEnabled(classicMode);
+    ui->spinBoxInterval->setEnabled(classicMode);
+    if (m_groupBoxLocalMode) {
+        m_groupBoxLocalMode->setVisible(true);
+        m_groupBoxLocalMode->setEnabled(!classicMode);
+    }
 }
 
 void DlgSettings::setupHotkeysForm() {

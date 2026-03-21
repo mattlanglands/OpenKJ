@@ -1,6 +1,7 @@
 #include "openkjembeddedapi.h"
 
 #include <algorithm>
+#include <QCryptographicHash>
 #include <QDateTime>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -9,6 +10,9 @@
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QStringList>
+#include <QUrl>
+#include <QUrlQuery>
+#include <QUuid>
 
 OpenKJEmbeddedApi::OpenKJEmbeddedApi(TableModelRotation &rotationModel,
                                      TableModelQueueSongs &queueModel,
@@ -22,13 +26,14 @@ OpenKJEmbeddedApi::OpenKJEmbeddedApi(TableModelRotation &rotationModel,
     connect(&m_server, &QTcpServer::newConnection, this, &OpenKJEmbeddedApi::onNewConnection);
 }
 
-bool OpenKJEmbeddedApi::start(const quint16 port)
+bool OpenKJEmbeddedApi::start(const quint16 port, const QHostAddress &address)
 {
     if (m_server.isListening()) {
         return true;
     }
 
-    return m_server.listen(QHostAddress::Any, port);
+    ensureLocalModeSchema();
+    return m_server.listen(address, port);
 }
 
 void OpenKJEmbeddedApi::stop()
@@ -120,13 +125,18 @@ bool OpenKJEmbeddedApi::tryParseHttpRequest(QByteArray &buffer, HttpRequest &req
 
 QByteArray OpenKJEmbeddedApi::handleRequest(const HttpRequest &request)
 {
-    if (request.method == "GET" && request.path == "/health") {
+    QString cleanPath;
+    QUrlQuery query;
+    parseRequestPath(request.path, cleanPath, query);
+
+    if (request.method == "GET" && cleanPath == "/health") {
         QJsonObject out;
         out.insert("status", "ok");
+        out.insert("mode", m_settings.appModeName());
         return jsonResponse(200, out);
     }
 
-    if (request.method == "GET" && request.path == "/stats") {
+    if (request.method == "GET" && cleanPath == "/stats") {
         QSqlQuery query;
         query.exec("SELECT COUNT(1) FROM dbsongs WHERE discid != '!!DROPPED!!' AND discid != '!!BAD!!'");
         int songCount = 0;
@@ -147,10 +157,15 @@ QByteArray OpenKJEmbeddedApi::handleRequest(const HttpRequest &request)
         out.insert("request_count", queueCount);
         out.insert("accepting", isAccepting());
         out.insert("serial", m_settings.embeddedApiSerial());
+        out.insert("mode", m_settings.appModeName());
         return jsonResponse(200, out);
     }
 
-    if (request.method == "POST" && request.path == "/api.php") {
+    if (request.method == "GET" && cleanPath.startsWith("/local/")) {
+        return handleLocalApiGet(cleanPath, query);
+    }
+
+    if (request.method == "POST" && cleanPath == "/api.php") {
         QJsonParseError parseError;
         const QJsonDocument doc = QJsonDocument::fromJson(request.body, &parseError);
         if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
@@ -163,7 +178,7 @@ QByteArray OpenKJEmbeddedApi::handleRequest(const HttpRequest &request)
         return jsonResponse(200, handleApiCommand(doc.object()));
     }
 
-    if (request.method == "POST" && request.path == "/browse") {
+    if (request.method == "POST" && cleanPath == "/browse") {
         QJsonParseError parseError;
         const QJsonDocument doc = QJsonDocument::fromJson(request.body, &parseError);
         if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
@@ -210,6 +225,18 @@ QByteArray OpenKJEmbeddedApi::handleRequest(const HttpRequest &request)
         QJsonObject out;
         out.insert("songs", songs);
         return jsonResponse(200, out);
+    }
+
+    if (request.method == "POST" && cleanPath.startsWith("/local/")) {
+        QJsonParseError parseError;
+        const QJsonDocument doc = QJsonDocument::fromJson(request.body, &parseError);
+        const QJsonObject payload = (parseError.error == QJsonParseError::NoError && doc.isObject())
+            ? doc.object()
+            : QJsonObject();
+        if (!request.body.trimmed().isEmpty() && (parseError.error != QJsonParseError::NoError || !doc.isObject())) {
+            return jsonResponse(400, QJsonObject{{"ok", false}, {"error", "Invalid JSON"}});
+        }
+        return handleLocalApiPost(cleanPath, payload);
     }
 
     QJsonObject out;
@@ -288,6 +315,32 @@ QByteArray OpenKJEmbeddedApi::handleApiCommand(const QJsonObject &payload)
         return commandGetRequests();
     }
 
+    if (command == "getCapabilities") {
+        return buildCapabilities();
+    }
+
+    if (command == "getEventSettings") {
+        return buildEventSettings();
+    }
+
+    if (command == "setEventSettings") {
+        if (!isValidAdminSession(payload.value("token").toString().trimmed())) {
+            return QJsonObject{{"ok", false}, {"error", "Admin authentication required"}};
+        }
+
+        const QString appName = payload.value("appName").toString().trimmed();
+        const QString tagline = payload.value("tagline").toString().trimmed();
+        QSqlQuery query;
+        query.prepare("INSERT INTO local_event_settings (settings_id, app_name, tagline) VALUES (1, :app_name, :tagline) "
+                      "ON CONFLICT(settings_id) DO UPDATE SET app_name = excluded.app_name, tagline = excluded.tagline");
+        query.bindValue(":app_name", appName.isEmpty() ? "OpenKJ" : appName);
+        query.bindValue(":tagline", tagline);
+        if (!query.exec()) {
+            return QJsonObject{{"ok", false}, {"error", query.lastError().text()}};
+        }
+        return buildEventSettings();
+    }
+
     if (command == "deleteRequest") {
         return commandDeleteRequest(payload);
     }
@@ -323,6 +376,7 @@ QByteArray OpenKJEmbeddedApi::handleApiCommand(const QJsonObject &payload)
 QJsonObject OpenKJEmbeddedApi::commandSearch(const QJsonObject &payload)
 {
     const QString searchString = payload.value("searchString").toString().trimmed();
+    const int limit = std::clamp(payload.value("limit").toInt(100), 1, 500);
 
     QStringList terms = searchString.split(' ', Qt::SkipEmptyParts);
     QSqlQuery query;
@@ -334,7 +388,7 @@ QJsonObject OpenKJEmbeddedApi::commandSearch(const QJsonObject &payload)
             sql += QString("AND lower(artist || ' ' || title) LIKE :term%1 ").arg(i);
         }
     }
-    sql += "ORDER BY upper(artist), upper(title) LIMIT 100";
+    sql += QString("ORDER BY upper(artist), upper(title) LIMIT %1").arg(limit);
 
     query.prepare(sql);
     for (int i = 0; i < terms.size(); ++i) {
@@ -613,6 +667,91 @@ QJsonObject OpenKJEmbeddedApi::commandAdminAction(const QJsonObject &payload)
     return QJsonObject{{"command", "adminAction"}, {"error", "false"}, {"serial", m_settings.embeddedApiSerial()}};
 }
 
+QByteArray OpenKJEmbeddedApi::handleLocalApiGet(const QString &path, const QUrlQuery &query)
+{
+    if (path == "/local/queue") {
+        return jsonResponse(200, buildQueueResponse());
+    }
+    if (path == "/local/songs") {
+        const QString q = query.queryItemValue("q");
+        const int limit = std::clamp(query.queryItemValue("limit").toInt(), 1, 500);
+        return jsonResponse(200, commandSearch(QJsonObject{{"searchString", q}, {"limit", limit}}));
+    }
+    if (path == "/local/user/me") {
+        return jsonResponse(200, currentLocalUser(query));
+    }
+    if (path == "/local/auth/me") {
+        return jsonResponse(200, currentAdmin(query));
+    }
+    if (path == "/local/capabilities") {
+        return jsonResponse(200, buildCapabilities());
+    }
+    if (path == "/local/event-settings") {
+        return jsonResponse(200, buildEventSettings());
+    }
+
+    return jsonResponse(404, QJsonObject{{"ok", false}, {"error", "Not Found"}});
+}
+
+QByteArray OpenKJEmbeddedApi::handleLocalApiPost(const QString &path, const QJsonObject &payload)
+{
+    if (path == "/local/user/register") {
+        return jsonResponse(200, registerLocalUser(payload));
+    }
+    if (path == "/local/user/login") {
+        return jsonResponse(200, loginLocalUser(payload));
+    }
+    if (path == "/local/user/logout") {
+        return jsonResponse(200, logoutLocalUser(payload));
+    }
+    if (path == "/local/user/profile/name") {
+        return jsonResponse(200, updateLocalUsername(payload));
+    }
+    if (path == "/local/user/profile/password") {
+        return jsonResponse(200, updateLocalPassword(payload));
+    }
+    if (path == "/local/request") {
+        return jsonResponse(200, requestSongFromLocalUser(payload));
+    }
+    if (path == "/local/request/remove") {
+        return jsonResponse(200, removeOwnRequest(payload));
+    }
+    if (path == "/local/auth/login") {
+        return jsonResponse(200, loginAdmin(payload));
+    }
+    if (path == "/local/auth/logout") {
+        return jsonResponse(200, logoutAdmin(payload));
+    }
+    if (path == "/local/admin/action") {
+        return jsonResponse(200, runAdminActionRest(payload));
+    }
+    if (path == "/local/event-settings") {
+        if (!isValidAdminSession(payload.value("token").toString().trimmed())) {
+            return jsonResponse(401, QJsonObject{{"ok", false}, {"error", "Admin authentication required"}});
+        }
+
+        const QString appName = payload.value("appName").toString().trimmed();
+        const QString tagline = payload.value("tagline").toString().trimmed();
+        QSqlQuery query;
+        query.prepare("INSERT INTO local_event_settings (settings_id, app_name, tagline) VALUES (1, :app_name, :tagline) "
+                      "ON CONFLICT(settings_id) DO UPDATE SET app_name = excluded.app_name, tagline = excluded.tagline");
+        query.bindValue(":app_name", appName.isEmpty() ? "OpenKJ" : appName);
+        query.bindValue(":tagline", tagline);
+        const bool ok = query.exec();
+        return ok ? buildEventSettings()
+                  : QJsonObject{{"ok", false}, {"error", query.lastError().text()}};
+    }
+
+    return jsonResponse(404, QJsonObject{{"ok", false}, {"error", "Not Found"}});
+}
+
+void OpenKJEmbeddedApi::parseRequestPath(const QString &path, QString &cleanPath, QUrlQuery &query)
+{
+    const QUrl url(path);
+    cleanPath = url.path();
+    query = QUrlQuery(url);
+}
+
 QByteArray OpenKJEmbeddedApi::jsonResponse(const int statusCode, const QJsonObject &object) const
 {
     const QByteArray body = QJsonDocument(object).toJson(QJsonDocument::Compact);
@@ -638,8 +777,12 @@ QByteArray OpenKJEmbeddedApi::statusText(const int code)
             return "OK";
         case 400:
             return "Bad Request";
+        case 401:
+            return "Unauthorized";
         case 404:
             return "Not Found";
+        case 500:
+            return "Internal Server Error";
         default:
             return "Error";
     }
@@ -697,6 +840,13 @@ bool OpenKJEmbeddedApi::removeQueueSongById(const int qsongId)
     del.prepare("DELETE FROM queuesongs WHERE qsongid = :id");
     del.bindValue(":id", qsongId);
     const bool removed = del.exec();
+
+    if (removed) {
+        QSqlQuery ownerCleanup;
+        ownerCleanup.prepare("DELETE FROM local_request_owners WHERE request_id = :id");
+        ownerCleanup.bindValue(":id", qsongId);
+        ownerCleanup.exec();
+    }
 
     if (removed && singerId >= 0) {
         normalizeSingerQueuePositions(singerId);
@@ -830,4 +980,444 @@ int OpenKJEmbeddedApi::nextSingerId(const int direction) const
 
     const int nextIdx = (idx + direction + singers.size()) % singers.size();
     return singers.at(nextIdx).first;
+}
+
+QJsonObject OpenKJEmbeddedApi::buildQueueResponse()
+{
+    QJsonObject queue = commandGetRequests();
+    queue.insert("ok", true);
+    queue.insert("queueLocked", !isAccepting());
+    return queue;
+}
+
+QJsonObject OpenKJEmbeddedApi::buildCapabilities() const
+{
+    return QJsonObject{
+        {"ok", true},
+        {"mode", m_settings.appModeName()},
+        {"supportsRemoveOwnSong", true},
+        {"supportsLocalUsers", true},
+        {"supportsAdminAuth", true},
+        {"supportsLocalMode", true}
+    };
+}
+
+QJsonObject OpenKJEmbeddedApi::buildEventSettings() const
+{
+    QSqlQuery query;
+    query.exec("SELECT app_name, tagline FROM local_event_settings WHERE settings_id = 1");
+    QString appName{"OpenKJ"};
+    QString tagline;
+    if (query.next()) {
+        appName = query.value(0).toString().trimmed();
+        tagline = query.value(1).toString().trimmed();
+        if (appName.isEmpty()) {
+            appName = "OpenKJ";
+        }
+    }
+
+    return QJsonObject{{"ok", true}, {"appName", appName}, {"tagline", tagline}};
+}
+
+bool OpenKJEmbeddedApi::ensureLocalModeSchema()
+{
+    QSqlQuery query;
+    const QStringList statements{
+        "CREATE TABLE IF NOT EXISTS local_users ("
+        "username_normalized TEXT PRIMARY KEY,"
+        "username TEXT NOT NULL,"
+        "password_hash BLOB NOT NULL,"
+        "created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
+        "CREATE TABLE IF NOT EXISTS local_user_sessions ("
+        "token TEXT PRIMARY KEY,"
+        "username_normalized TEXT NOT NULL,"
+        "expires_at INTEGER NOT NULL,"
+        "FOREIGN KEY(username_normalized) REFERENCES local_users(username_normalized) ON DELETE CASCADE)",
+        "CREATE TABLE IF NOT EXISTS local_admin_sessions ("
+        "token TEXT PRIMARY KEY,"
+        "expires_at INTEGER NOT NULL)",
+        "CREATE TABLE IF NOT EXISTS local_request_owners ("
+        "request_id INTEGER PRIMARY KEY,"
+        "username_normalized TEXT NOT NULL,"
+        "FOREIGN KEY(username_normalized) REFERENCES local_users(username_normalized) ON DELETE CASCADE)",
+        "CREATE TABLE IF NOT EXISTS local_event_settings ("
+        "settings_id INTEGER PRIMARY KEY CHECK(settings_id = 1),"
+        "app_name TEXT NOT NULL DEFAULT 'OpenKJ',"
+        "tagline TEXT NOT NULL DEFAULT '')"
+    };
+
+    for (const auto &statement : statements) {
+        if (!query.exec(statement)) {
+            return false;
+        }
+    }
+
+    query.exec("INSERT OR IGNORE INTO local_event_settings (settings_id, app_name, tagline) VALUES (1, 'OpenKJ', '')");
+    query.exec("DELETE FROM local_user_sessions WHERE expires_at <= strftime('%s','now')");
+    query.exec("DELETE FROM local_admin_sessions WHERE expires_at <= strftime('%s','now')");
+    return true;
+}
+
+QString OpenKJEmbeddedApi::normalizeUsername(const QString &username)
+{
+    return username.trimmed().toLower();
+}
+
+QByteArray OpenKJEmbeddedApi::hashPassword(const QString &password)
+{
+    return QCryptographicHash::hash(password.trimmed().toUtf8(), QCryptographicHash::Sha256);
+}
+
+QString OpenKJEmbeddedApi::createUserSession(const QString &normalizedUsername)
+{
+    const QString token = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    const qint64 expiresAt = QDateTime::currentSecsSinceEpoch() + (60 * 60 * 24 * 30);
+    QSqlQuery query;
+    query.prepare("INSERT INTO local_user_sessions (token, username_normalized, expires_at) VALUES (:token, :username, :expires_at)");
+    query.bindValue(":token", token);
+    query.bindValue(":username", normalizedUsername);
+    query.bindValue(":expires_at", expiresAt);
+    query.exec();
+    return token;
+}
+
+QString OpenKJEmbeddedApi::createAdminSession()
+{
+    const QString token = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    const qint64 expiresAt = QDateTime::currentSecsSinceEpoch() + (60 * 60 * 24 * 7);
+    QSqlQuery query;
+    query.prepare("INSERT INTO local_admin_sessions (token, expires_at) VALUES (:token, :expires_at)");
+    query.bindValue(":token", token);
+    query.bindValue(":expires_at", expiresAt);
+    query.exec();
+    return token;
+}
+
+bool OpenKJEmbeddedApi::isValidUserSession(const QString &token, QString *normalizedUsername, QString *username)
+{
+    if (token.trimmed().isEmpty()) {
+        return false;
+    }
+
+    QSqlQuery query;
+    query.prepare("SELECT u.username_normalized, u.username "
+                  "FROM local_user_sessions s "
+                  "JOIN local_users u ON u.username_normalized = s.username_normalized "
+                  "WHERE s.token = :token AND s.expires_at > :now");
+    query.bindValue(":token", token.trimmed());
+    query.bindValue(":now", QDateTime::currentSecsSinceEpoch());
+    if (!query.exec() || !query.next()) {
+        return false;
+    }
+
+    if (normalizedUsername) {
+        *normalizedUsername = query.value(0).toString();
+    }
+    if (username) {
+        *username = query.value(1).toString();
+    }
+    return true;
+}
+
+bool OpenKJEmbeddedApi::isValidAdminSession(const QString &token)
+{
+    if (token.trimmed().isEmpty()) {
+        return false;
+    }
+
+    QSqlQuery query;
+    query.prepare("SELECT token FROM local_admin_sessions WHERE token = :token AND expires_at > :now");
+    query.bindValue(":token", token.trimmed());
+    query.bindValue(":now", QDateTime::currentSecsSinceEpoch());
+    return query.exec() && query.next();
+}
+
+QJsonObject OpenKJEmbeddedApi::registerLocalUser(const QJsonObject &payload)
+{
+    ensureLocalModeSchema();
+    const QString username = payload.value("username").toString().trimmed();
+    const QString password = payload.value("password").toString();
+    const QString normalized = normalizeUsername(username);
+
+    if (username.size() < 2 || username.size() > 24 || password.size() < 4) {
+        return QJsonObject{{"ok", false}, {"error", "Username or password does not meet requirements"}};
+    }
+
+    QSqlQuery exists;
+    exists.prepare("SELECT username_normalized FROM local_users WHERE username_normalized = :username");
+    exists.bindValue(":username", normalized);
+    if (exists.exec() && exists.next()) {
+        return QJsonObject{{"ok", false}, {"error", "Username is already registered"}};
+    }
+
+    QSqlQuery insert;
+    insert.prepare("INSERT INTO local_users (username_normalized, username, password_hash) "
+                   "VALUES (:username_normalized, :username, :password_hash)");
+    insert.bindValue(":username_normalized", normalized);
+    insert.bindValue(":username", username);
+    insert.bindValue(":password_hash", hashPassword(password));
+    if (!insert.exec()) {
+        return QJsonObject{{"ok", false}, {"error", insert.lastError().text()}};
+    }
+
+    return QJsonObject{{"ok", true}, {"username", username}, {"token", createUserSession(normalized)}};
+}
+
+QJsonObject OpenKJEmbeddedApi::loginLocalUser(const QJsonObject &payload)
+{
+    ensureLocalModeSchema();
+    const QString username = payload.value("username").toString().trimmed();
+    const QString password = payload.value("password").toString();
+    const QString normalized = normalizeUsername(username);
+
+    QSqlQuery query;
+    query.prepare("SELECT username, password_hash FROM local_users WHERE username_normalized = :username");
+    query.bindValue(":username", normalized);
+    if (!query.exec() || !query.next()) {
+        return QJsonObject{{"ok", false}, {"error", "Invalid username or password"}};
+    }
+
+    const QByteArray expected = query.value(1).toByteArray();
+    if (expected != hashPassword(password)) {
+        return QJsonObject{{"ok", false}, {"error", "Invalid username or password"}};
+    }
+
+    return QJsonObject{{"ok", true}, {"username", query.value(0).toString()}, {"token", createUserSession(normalized)}};
+}
+
+QJsonObject OpenKJEmbeddedApi::logoutLocalUser(const QJsonObject &payload)
+{
+    return QJsonObject{{"ok", removeUserSessionToken(payload.value("token").toString().trimmed())}};
+}
+
+QJsonObject OpenKJEmbeddedApi::currentLocalUser(const QUrlQuery &query)
+{
+    QString normalized;
+    QString username;
+    const bool authenticated = isValidUserSession(query.queryItemValue("token"), &normalized, &username);
+    Q_UNUSED(normalized)
+    return QJsonObject{{"ok", true}, {"authenticated", authenticated}, {"username", authenticated ? username : QString()}};
+}
+
+QJsonObject OpenKJEmbeddedApi::updateLocalUsername(const QJsonObject &payload)
+{
+    QString currentNormalized;
+    QString currentUsername;
+    if (!isValidUserSession(payload.value("token").toString().trimmed(), &currentNormalized, &currentUsername)) {
+        return QJsonObject{{"ok", false}, {"error", "Authentication required"}};
+    }
+
+    const QString nextUsername = payload.value("username").toString().trimmed();
+    const QString nextNormalized = normalizeUsername(nextUsername);
+    if (nextUsername.size() < 2 || nextUsername.size() > 24) {
+        return QJsonObject{{"ok", false}, {"error", "Invalid username"}};
+    }
+
+    QSqlQuery exists;
+    exists.prepare("SELECT username_normalized FROM local_users WHERE username_normalized = :username");
+    exists.bindValue(":username", nextNormalized);
+    if (exists.exec() && exists.next() && exists.value(0).toString() != currentNormalized) {
+        return QJsonObject{{"ok", false}, {"error", "Username is already registered"}};
+    }
+
+    QSqlQuery tx;
+    tx.exec("BEGIN TRANSACTION");
+    QSqlQuery updateUser;
+    updateUser.prepare("UPDATE local_users SET username_normalized = :next_normalized, username = :username "
+                       "WHERE username_normalized = :current_normalized");
+    updateUser.bindValue(":next_normalized", nextNormalized);
+    updateUser.bindValue(":username", nextUsername);
+    updateUser.bindValue(":current_normalized", currentNormalized);
+    const bool userOk = updateUser.exec();
+
+    QSqlQuery updateSessions;
+    updateSessions.prepare("UPDATE local_user_sessions SET username_normalized = :next_normalized "
+                           "WHERE username_normalized = :current_normalized");
+    updateSessions.bindValue(":next_normalized", nextNormalized);
+    updateSessions.bindValue(":current_normalized", currentNormalized);
+    const bool sessionsOk = updateSessions.exec();
+
+    QSqlQuery updateRequests;
+    updateRequests.prepare("UPDATE local_request_owners SET username_normalized = :next_normalized "
+                           "WHERE username_normalized = :current_normalized");
+    updateRequests.bindValue(":next_normalized", nextNormalized);
+    updateRequests.bindValue(":current_normalized", currentNormalized);
+    const bool requestsOk = updateRequests.exec();
+
+    tx.exec(userOk && sessionsOk && requestsOk ? "COMMIT" : "ROLLBACK");
+    if (!(userOk && sessionsOk && requestsOk)) {
+        return QJsonObject{{"ok", false}, {"error", "Could not update username"}};
+    }
+
+    return QJsonObject{{"ok", true}, {"username", nextUsername}};
+}
+
+QJsonObject OpenKJEmbeddedApi::updateLocalPassword(const QJsonObject &payload)
+{
+    QString currentNormalized;
+    QString currentUsername;
+    if (!isValidUserSession(payload.value("token").toString().trimmed(), &currentNormalized, &currentUsername)) {
+        return QJsonObject{{"ok", false}, {"error", "Authentication required"}};
+    }
+
+    QSqlQuery query;
+    query.prepare("SELECT password_hash FROM local_users WHERE username_normalized = :username");
+    query.bindValue(":username", currentNormalized);
+    if (!query.exec() || !query.next()) {
+        return QJsonObject{{"ok", false}, {"error", "Unknown user"}};
+    }
+
+    if (query.value(0).toByteArray() != hashPassword(payload.value("currentPassword").toString())) {
+        return QJsonObject{{"ok", false}, {"error", "Current password is incorrect"}};
+    }
+
+    const QString nextPassword = payload.value("newPassword").toString();
+    if (nextPassword.size() < 4) {
+        return QJsonObject{{"ok", false}, {"error", "New password is too short"}};
+    }
+
+    QSqlQuery update;
+    update.prepare("UPDATE local_users SET password_hash = :password_hash WHERE username_normalized = :username");
+    update.bindValue(":password_hash", hashPassword(nextPassword));
+    update.bindValue(":username", currentNormalized);
+    return QJsonObject{{"ok", update.exec()}};
+}
+
+QJsonObject OpenKJEmbeddedApi::loginAdmin(const QJsonObject &payload)
+{
+    const QString password = payload.value("password").toString();
+    if (!m_settings.chkPassword(password)) {
+        return QJsonObject{{"ok", false}, {"error", "Invalid admin password"}};
+    }
+    return QJsonObject{{"ok", true}, {"token", createAdminSession()}};
+}
+
+QJsonObject OpenKJEmbeddedApi::logoutAdmin(const QJsonObject &payload)
+{
+    return QJsonObject{{"ok", removeAdminSessionToken(payload.value("token").toString().trimmed())}};
+}
+
+QJsonObject OpenKJEmbeddedApi::currentAdmin(const QUrlQuery &query)
+{
+    const bool authenticated = isValidAdminSession(query.queryItemValue("token"));
+    return QJsonObject{{"ok", true}, {"authenticated", authenticated}};
+}
+
+QJsonObject OpenKJEmbeddedApi::requestSongFromLocalUser(const QJsonObject &payload)
+{
+    QString normalized;
+    QString username;
+    if (!isValidUserSession(payload.value("token").toString().trimmed(), &normalized, &username)) {
+        return QJsonObject{{"ok", false}, {"error", "Authentication required"}};
+    }
+
+    QJsonObject legacyPayload;
+    legacyPayload.insert("songId", payload.value("songId"));
+    legacyPayload.insert("singerName", username);
+    const QJsonObject response = commandSubmitRequest(legacyPayload);
+    if (response.value("error").toString() == "false" || response.value("success").toBool()) {
+        QSqlQuery query;
+        query.prepare("SELECT MAX(qsongid) FROM queuesongs qs "
+                      "INNER JOIN rotationsingers rs ON rs.singerid = qs.singer "
+                      "WHERE rs.name = :name AND qs.song = :song AND qs.played = 0");
+        query.bindValue(":name", username);
+        query.bindValue(":song", payload.value("songId").toInt());
+        if (query.exec() && query.next()) {
+            recordRequestOwner(query.value(0).toInt(), normalized);
+        }
+        return QJsonObject{{"ok", true}};
+    }
+
+    return QJsonObject{{"ok", false}, {"error", response.value("errorString").toString("Could not queue song")}};
+}
+
+QJsonObject OpenKJEmbeddedApi::removeOwnRequest(const QJsonObject &payload)
+{
+    QString normalized;
+    QString username;
+    Q_UNUSED(username)
+    if (!isValidUserSession(payload.value("token").toString().trimmed(), &normalized, &username)) {
+        return QJsonObject{{"ok", false}, {"error", "Authentication required"}};
+    }
+
+    const int requestId = payload.value("entryId").toString().toInt();
+    if (requestId <= 0) {
+        return QJsonObject{{"ok", false}, {"error", "Missing entryId"}};
+    }
+    if (requestOwner(requestId) != normalized) {
+        return QJsonObject{{"ok", false}, {"error", "You can only remove your own songs"}};
+    }
+    if (!removeQueueSongById(requestId)) {
+        return QJsonObject{{"ok", false}, {"error", "Song not found in queue"}};
+    }
+
+    QSqlQuery cleanup;
+    cleanup.prepare("DELETE FROM local_request_owners WHERE request_id = :request_id");
+    cleanup.bindValue(":request_id", requestId);
+    cleanup.exec();
+    nextSerial();
+    return QJsonObject{{"ok", true}};
+}
+
+QJsonObject OpenKJEmbeddedApi::runAdminActionRest(const QJsonObject &payload)
+{
+    if (!isValidAdminSession(payload.value("token").toString().trimmed())) {
+        return QJsonObject{{"ok", false}, {"error", "Admin authentication required"}};
+    }
+
+    QJsonObject legacyPayload;
+    legacyPayload.insert("action", payload.value("type").toString());
+    if (payload.contains("entryId")) {
+        legacyPayload.insert("request_id", payload.value("entryId").toString().toInt());
+    }
+    if (payload.contains("value")) {
+        legacyPayload.insert("value", payload.value("value"));
+    }
+
+    const QJsonObject response = commandAdminAction(legacyPayload);
+    if (response.value("error").toString() == "false") {
+        return QJsonObject{{"ok", true}};
+    }
+    return QJsonObject{{"ok", false}, {"error", response.value("errorString").toString("Admin action failed")}};
+}
+
+bool OpenKJEmbeddedApi::recordRequestOwner(const int requestId, const QString &normalizedUsername)
+{
+    if (requestId <= 0 || normalizedUsername.isEmpty()) {
+        return false;
+    }
+
+    QSqlQuery query;
+    query.prepare("INSERT INTO local_request_owners (request_id, username_normalized) VALUES (:request_id, :username) "
+                  "ON CONFLICT(request_id) DO UPDATE SET username_normalized = excluded.username_normalized");
+    query.bindValue(":request_id", requestId);
+    query.bindValue(":username", normalizedUsername);
+    return query.exec();
+}
+
+QString OpenKJEmbeddedApi::requestOwner(const int requestId) const
+{
+    QSqlQuery query;
+    query.prepare("SELECT username_normalized FROM local_request_owners WHERE request_id = :request_id");
+    query.bindValue(":request_id", requestId);
+    if (query.exec() && query.next()) {
+        return query.value(0).toString();
+    }
+    return {};
+}
+
+bool OpenKJEmbeddedApi::removeUserSessionToken(const QString &token)
+{
+    QSqlQuery query;
+    query.prepare("DELETE FROM local_user_sessions WHERE token = :token");
+    query.bindValue(":token", token);
+    return query.exec();
+}
+
+bool OpenKJEmbeddedApi::removeAdminSessionToken(const QString &token)
+{
+    QSqlQuery query;
+    query.prepare("DELETE FROM local_admin_sessions WHERE token = :token");
+    query.bindValue(":token", token);
+    return query.exec();
 }

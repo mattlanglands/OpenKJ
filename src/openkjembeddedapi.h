@@ -6,6 +6,7 @@
 #include <QTcpSocket>
 #include <QHash>
 #include <QJsonObject>
+#include <QUrlQuery>
 #include "models/tablemodelrotation.h"
 #include "models/tablemodelqueuesongs.h"
 #include "settings.h"
@@ -20,7 +21,7 @@ public:
                                Settings &settings,
                                QObject *parent = nullptr);
 
-    bool start(quint16 port = 5050);
+    bool start(quint16 port = 5050, const QHostAddress &address = QHostAddress::Any);
     void stop();
 
 private:
@@ -45,10 +46,13 @@ private:
     bool tryParseHttpRequest(QByteArray &buffer, HttpRequest &request);
     QByteArray handleRequest(const HttpRequest &request);
     QByteArray handleApiCommand(const QJsonObject &payload);
+    QByteArray handleLocalApiGet(const QString &path, const QUrlQuery &query);
+    QByteArray handleLocalApiPost(const QString &path, const QJsonObject &payload);
 
     QByteArray jsonResponse(int statusCode, const QJsonObject &object) const;
     static QByteArray statusText(int code);
     static QHash<QString, QString> parseHeaders(const QList<QByteArray> &headerLines);
+    static void parseRequestPath(const QString &path, QString &cleanPath, QUrlQuery &query);
 
     int nextSerial();
     bool isAccepting() const;
@@ -67,6 +71,32 @@ private:
     bool setQueueSongKey(int qsongId, int keyChange);
     int currentSingerId() const;
     int nextSingerId(int direction) const;
+    QJsonObject buildQueueResponse();
+    QJsonObject buildCapabilities() const;
+    QJsonObject buildEventSettings() const;
+    bool ensureLocalModeSchema();
+    static QString normalizeUsername(const QString &username);
+    static QByteArray hashPassword(const QString &password);
+    QString createUserSession(const QString &normalizedUsername);
+    QString createAdminSession();
+    bool isValidUserSession(const QString &token, QString *normalizedUsername = nullptr, QString *username = nullptr);
+    bool isValidAdminSession(const QString &token);
+    QJsonObject registerLocalUser(const QJsonObject &payload);
+    QJsonObject loginLocalUser(const QJsonObject &payload);
+    QJsonObject logoutLocalUser(const QJsonObject &payload);
+    QJsonObject currentLocalUser(const QUrlQuery &query);
+    QJsonObject updateLocalUsername(const QJsonObject &payload);
+    QJsonObject updateLocalPassword(const QJsonObject &payload);
+    QJsonObject loginAdmin(const QJsonObject &payload);
+    QJsonObject logoutAdmin(const QJsonObject &payload);
+    QJsonObject currentAdmin(const QUrlQuery &query);
+    QJsonObject requestSongFromLocalUser(const QJsonObject &payload);
+    QJsonObject removeOwnRequest(const QJsonObject &payload);
+    QJsonObject runAdminActionRest(const QJsonObject &payload);
+    bool recordRequestOwner(int requestId, const QString &normalizedUsername);
+    QString requestOwner(int requestId) const;
+    bool removeUserSessionToken(const QString &token);
+    bool removeAdminSessionToken(const QString &token);
 };
 
 #endif
