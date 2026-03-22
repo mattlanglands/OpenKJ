@@ -21,7 +21,6 @@
 #include "dlgsettings.h"
 #include "ui_dlgsettings.h"
 #include <QGuiApplication>
-#include <QDesktopWidget>
 #include <QFontDialog>
 #include <QColorDialog>
 #include <QFileDialog>

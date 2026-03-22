@@ -168,7 +168,6 @@ int main(int argc, char *argv[]) {
 
     a.installEventFilter(filter);
     qputenv("GST_DEBUG", "*:3");
-    QGuiApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
     if (settings.theme() == 1) {
         QPalette palette;
         QApplication::setStyle(QStyleFactory::create("Fusion"));

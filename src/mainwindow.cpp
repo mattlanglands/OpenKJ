@@ -22,7 +22,6 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 #include <QMessageBox>
-#include <QDesktopWidget>
 #include <QMenu>
 #include <QInputDialog>
 #include <QFileDialog>
