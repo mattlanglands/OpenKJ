@@ -186,7 +186,7 @@ QStringList DlgRegularImport::legacyLoadSingerList(const QString &fileName)
     while (!xml.isEndDocument())
     {
         xml.readNext();
-        if ((xml.isStartElement()) && (xml.name() == "singer"))
+        if ((xml.isStartElement()) && (xml.name() == QLatin1StringView("singer")))
             singers << xml.attributes().value("name").toString();
     }
     xmlFile->close();
@@ -220,13 +220,13 @@ QStringList DlgRegularImport::legacyImportSinger(const QString &name)
     {
         QApplication::processEvents();
         xml.readNext();
-        if ((xml.isStartElement()) && (xml.name() == "singer") && (xml.attributes().value("name") == name))
+        if ((xml.isStartElement()) && (xml.name() == QLatin1StringView("singer")) && (xml.attributes().value("name") == name))
         {
             xml.readNext();
             int position = 0;
-            while ((xml.name() != "singer") && (!xml.isEndDocument()))
+            while ((xml.name() != QLatin1StringView("singer")) && (!xml.isEndDocument()))
             {
-                if ((xml.isStartElement()) && (xml.name() == "song"))
+                if ((xml.isStartElement()) && (xml.name() == QLatin1StringView("song")))
                 {
                     QApplication::processEvents();
                     QSqlQuery query;
