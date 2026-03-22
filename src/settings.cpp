@@ -394,7 +394,7 @@ Settings::Settings(QObject *parent) :
 #ifdef Q_OS_LINUX
     settings = new QSettings(this);
 #else
-    QDir khDir(QStandardPaths::writableLocation(QStandardPaths::DataLocation));
+    QDir khDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation));
     if (!khDir.exists())
     {
         khDir.mkpath(khDir.absolutePath());
