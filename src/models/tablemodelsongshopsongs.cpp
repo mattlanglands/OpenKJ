@@ -125,5 +125,5 @@ bool SortFilterProxyModelSongShopSongs::filterAcceptsRow(int source_row, const Q
 void SortFilterProxyModelSongShopSongs::setSearchTerms(const QString &value)
 {
     searchTerms = value;
-    setFilterRegExp("");
+    invalidateFilter();
 }
