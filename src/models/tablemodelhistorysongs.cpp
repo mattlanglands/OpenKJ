@@ -47,13 +47,13 @@ QVariant TableModelHistorySongs::data(const QModelIndex &index, int role) const 
 QVariant TableModelHistorySongs::getTextAlignment(const QModelIndex &index) {
     switch (index.column()) {
         case KEY_CHANGE:
-            return Qt::AlignCenter;
+            return QVariant::fromValue(Qt::Alignment(Qt::AlignCenter));
         case SUNG_COUNT:
-            return Qt::AlignRight | Qt::AlignVCenter;
+            return QVariant::fromValue(Qt::Alignment(Qt::AlignRight | Qt::AlignVCenter));
         case LAST_SUNG:
-            return Qt::AlignHCenter | Qt::AlignVCenter;
+            return QVariant::fromValue(Qt::Alignment(Qt::AlignHCenter | Qt::AlignVCenter));
         default:
-            return Qt::AlignLeft | Qt::AlignVCenter;
+            return QVariant::fromValue(Qt::Alignment(Qt::AlignLeft | Qt::AlignVCenter));
     }
 }
 

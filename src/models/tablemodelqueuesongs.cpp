@@ -93,9 +93,9 @@ QVariant TableModelQueueSongs::data(const QModelIndex &index, int role) const {
 QVariant TableModelQueueSongs::getColumnTextAlignmentRoleData(int column) {
     switch (column) {
         case COL_KEY:
-            return Qt::AlignHCenter | Qt::AlignVCenter;
+            return QVariant::fromValue(Qt::Alignment(Qt::AlignHCenter | Qt::AlignVCenter));
         case COL_DURATION:
-            return Qt::AlignRight | Qt::AlignVCenter;
+            return QVariant::fromValue(Qt::Alignment(Qt::AlignRight | Qt::AlignVCenter));
         default:
             return {};
     }

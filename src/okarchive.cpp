@@ -22,6 +22,7 @@
 #include "okarchive.h"
 #include <QFile>
 #include <QBuffer>
+#include <QRegularExpression>
 #include <QTemporaryDir>
 #ifdef Q_OS_WIN
 #include <io.h>
@@ -322,9 +323,9 @@ zipEntries OkArchive::getZipContents()
     }
     m_logger->trace("{} Infozip output: \n{}",m_loggingPrefix, output);
 #if QT_VERSION < QT_VERSION_CHECK(5, 15, 0)
-    QStringList data = output.split(QRegExp("[\r\n]"),QString::SkipEmptyParts);
+    QStringList data = output.split(QRegularExpression("[\r\n]"), Qt::SkipEmptyParts);
 #else
-    QStringList data = output.split(QRegExp("[\r\n]"),Qt::SkipEmptyParts);
+    QStringList data = output.split(QRegularExpression("[\r\n]"), Qt::SkipEmptyParts);
 #endif
     int fnStart = 0;
     int listStart = 0;
@@ -427,5 +428,4 @@ bool OkArchive::zipIsValid()
         return true;
     }
 }
-
 

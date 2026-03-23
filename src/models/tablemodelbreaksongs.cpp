@@ -97,9 +97,9 @@ QVariant TableModelBreakSongs::data(const QModelIndex &index, int role) const
     {
         switch (index.column()) {
         case COL_DURATION:
-            return Qt::AlignRight | Qt::AlignVCenter;
+            return QVariant::fromValue(Qt::Alignment(Qt::AlignRight | Qt::AlignVCenter));
         default:
-            return Qt::AlignLeft | Qt::AlignVCenter;
+            return QVariant::fromValue(Qt::Alignment(Qt::AlignLeft | Qt::AlignVCenter));
         }
     }
     return QVariant();
