@@ -45,7 +45,7 @@ private:
 
     bool tryParseHttpRequest(QByteArray &buffer, HttpRequest &request);
     QByteArray handleRequest(const HttpRequest &request);
-    QByteArray handleApiCommand(const QJsonObject &payload);
+    QJsonObject handleApiCommand(const QJsonObject &payload);
     QByteArray handleLocalApiGet(const QString &path, const QUrlQuery &query);
     QByteArray handleLocalApiPost(const QString &path, const QJsonObject &payload);
 

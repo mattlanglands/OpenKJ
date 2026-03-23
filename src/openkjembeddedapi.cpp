@@ -245,7 +245,7 @@ QByteArray OpenKJEmbeddedApi::handleRequest(const HttpRequest &request)
     return jsonResponse(404, out);
 }
 
-QByteArray OpenKJEmbeddedApi::handleApiCommand(const QJsonObject &payload)
+QJsonObject OpenKJEmbeddedApi::handleApiCommand(const QJsonObject &payload)
 {
     const QString command = payload.value("command").toString();
     if (command.isEmpty()) {
@@ -738,8 +738,9 @@ QByteArray OpenKJEmbeddedApi::handleLocalApiPost(const QString &path, const QJso
         query.bindValue(":app_name", appName.isEmpty() ? "OpenKJ" : appName);
         query.bindValue(":tagline", tagline);
         const bool ok = query.exec();
-        return ok ? buildEventSettings()
-                  : QJsonObject{{"ok", false}, {"error", query.lastError().text()}};
+        return jsonResponse(ok ? 200 : 400,
+                            ok ? buildEventSettings()
+                               : QJsonObject{{"ok", false}, {"error", query.lastError().text()}});
     }
 
     return jsonResponse(404, QJsonObject{{"ok", false}, {"error", "Not Found"}});

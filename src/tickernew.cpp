@@ -1,6 +1,7 @@
 #include "tickernew.h"
 
 #include <QPainter>
+#include <QFile>
 #include <QFontMetrics>
 #include <QResizeEvent>
 #include <QMutex>
