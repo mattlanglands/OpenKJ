@@ -1,7 +1,7 @@
 #include "dlgeditsong.h"
 #include "ui_dlgeditsong.h"
-#include <QRegExpValidator>
-#include <QRegExp>
+#include <QRegularExpressionValidator>
+#include <QRegularExpression>
 
 DlgEditSong::DlgEditSong(QString artist, QString title, QString songId, bool showSongId, bool allowRename, QWidget *parent) :
     QDialog(parent),
@@ -11,9 +11,9 @@ DlgEditSong::DlgEditSong(QString artist, QString title, QString songId, bool sho
     ui->lineEditArtist->setText(artist);
     ui->lineEditTitle->setText(title);
     ui->lineEditSongId->setText(songId);
-    QRegExp exp("[^\\*\\:\\/\\\\]+");
-    exp.setCaseSensitivity(Qt::CaseInsensitive);
-    QRegExpValidator *v = new QRegExpValidator(exp, this);
+    QRegularExpression exp(QStringLiteral("[^\\*\\:\\/\\\\]+"),
+                           QRegularExpression::CaseInsensitiveOption);
+    QRegularExpressionValidator *v = new QRegularExpressionValidator(exp, this);
     ui->lineEditArtist->setValidator(v);
     ui->lineEditTitle->setValidator(v);
     ui->lineEditSongId->setValidator(v);

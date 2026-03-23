@@ -1,6 +1,8 @@
 #include "dlgsongshoppurchase.h"
 
 #include <utility>
+#include <QRegularExpression>
+#include <QRegularExpressionValidator>
 #include "ui_dlgsongshoppurchase.h"
 #include "dlgsetpassword.h"
 #include "dlgpassword.h"
@@ -12,12 +14,13 @@ DlgSongShopPurchase::DlgSongShopPurchase(std::shared_ptr<SongShop> songShop, QWi
     shop(std::move(songShop)),
     ui(new Ui::DlgSongShopPurchase)
 {
+    const QRegularExpression digitsOnly(QStringLiteral("[0-9]*"));
     setupDone = false;
     ui->setupUi(this);
-    ui->lineEditCCN->setValidator(new QRegExpValidator(QRegExp("[0-9]*"), this));
-    ui->lineEditCCM->setValidator(new QRegExpValidator(QRegExp("[0-9]*"), this));
-    ui->lineEditCCY->setValidator(new QRegExpValidator(QRegExp("[0-9]*"), this));
-    ui->lineEditCCV->setValidator(new QRegExpValidator(QRegExp("[0-9]*"), this));
+    ui->lineEditCCN->setValidator(new QRegularExpressionValidator(digitsOnly, this));
+    ui->lineEditCCM->setValidator(new QRegularExpressionValidator(digitsOnly, this));
+    ui->lineEditCCY->setValidator(new QRegularExpressionValidator(digitsOnly, this));
+    ui->lineEditCCV->setValidator(new QRegularExpressionValidator(digitsOnly, this));
     knLoginTest = false;
     ui->cbxSaveAccount->setChecked(m_settings.saveKNAccount());
     ui->cbxSaveCard->setChecked(m_settings.saveCC());
