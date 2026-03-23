@@ -124,7 +124,7 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
     endif ()
     message("Using GST_BASE_PATH: ${GST_BASE_PATH}")
     message("Using GST_BASE_PATH_NATIVE: ${GST_BASE_PATH_NATIVE}")
-    include_directories(
+    set(WINDOWS_GSTREAMER_INCLUDE_DIRS
             ${GST_BASE_PATH}/include/gstreamer-1.0
             ${GST_BASE_PATH}/include/glib-2.0
             ${GST_BASE_PATH}/lib/glib-2.0/include
@@ -731,6 +731,9 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
             ${SOURCE_FILES}
             ${WINDOWS_ICON_RC}
             )
+    target_include_directories(openkj PRIVATE
+            $<$<NOT:$<COMPILE_LANGUAGE:RC>>:${WINDOWS_GSTREAMER_INCLUDE_DIRS}>
+    )
     target_link_libraries(openkj PRIVATE ${LIBRARIES})
     set_property(
             TARGET openkj
