@@ -49,11 +49,11 @@ QVariant TableModelHistorySongs::getTextAlignment(const QModelIndex &index) {
         case KEY_CHANGE:
             return Qt::AlignCenter;
         case SUNG_COUNT:
-            return Qt::AlignRight + Qt::AlignVCenter;
+            return Qt::AlignRight | Qt::AlignVCenter;
         case LAST_SUNG:
-            return Qt::AlignHCenter + Qt::AlignVCenter;
+            return Qt::AlignHCenter | Qt::AlignVCenter;
         default:
-            return Qt::AlignLeft + Qt::AlignVCenter;
+            return Qt::AlignLeft | Qt::AlignVCenter;
     }
 }
 

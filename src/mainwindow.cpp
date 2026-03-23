@@ -756,9 +756,9 @@ MainWindow::MainWindow(QWidget *parent) :
     m_rotModel.setHeaderData(3, Qt::Horizontal, "");
     m_rotModel.setHeaderData(4, Qt::Horizontal, "");
     m_logger->info("{} Adding singer count to status bar", m_loggingPrefix);
-    m_labelAppMode.setMargin(4);
-    m_labelSingerCount.setMargin(4);
-    m_labelRotationDuration.setMargin(4);
+    m_labelAppMode.setContentsMargins(4, 4, 4, 4);
+    m_labelSingerCount.setContentsMargins(4, 4, 4, 4);
+    m_labelRotationDuration.setContentsMargins(4, 4, 4, 4);
     ui->statusBar->addPermanentWidget(&m_labelAppMode);
     ui->statusBar->addWidget(&m_labelSingerCount);
     ui->statusBar->addWidget(&m_labelRotationDuration);
