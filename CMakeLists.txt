@@ -572,8 +572,17 @@ set(SOURCE_FILES
         src/gstreamer/gstreamerhelper.h
         )
 
+set(SPDLOG_LIBRARY_TARGET spdlog)
+if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
+    if (TARGET spdlog_header_only)
+        set(SPDLOG_LIBRARY_TARGET spdlog_header_only)
+    elseif (TARGET spdlog::spdlog_header_only)
+        set(SPDLOG_LIBRARY_TARGET spdlog::spdlog_header_only)
+    endif ()
+endif ()
+
 set(LIBRARIES
-        spdlog
+        ${SPDLOG_LIBRARY_TARGET}
         Qt6::Widgets
         Qt6::Core
         Qt6::Gui
