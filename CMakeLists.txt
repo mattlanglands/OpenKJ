@@ -136,6 +136,10 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
     add_compile_definitions(
             MINIZ_NO_TIME
     )
+    add_compile_definitions(
+            SPDLOG_HEADER_ONLY
+            FMT_HEADER_ONLY
+    )
 
     link_libraries(
             gstreamer-1.0
