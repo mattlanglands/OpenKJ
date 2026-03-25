@@ -752,7 +752,8 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
             $<$<NOT:$<COMPILE_LANGUAGE:RC>>:${WINDOWS_GSTREAMER_INCLUDE_DIRS}>
     )
     target_link_libraries(openkj PRIVATE ${LIBRARIES})
-    target_link_options(openkj PRIVATE -static-libgcc -Wl,--allow-multiple-definition)
+    target_link_options(openkj PRIVATE -static-libgcc -static-libstdc++ -Wl,--allow-multiple-definition -Wl,--enable-runtime-pseudo-reloc-v2)
+    target_compile_options(openkj PRIVATE -fno-builtin-pow)
     set_property(
             TARGET openkj
             PROPERTY WIN32_EXECUTABLE true
