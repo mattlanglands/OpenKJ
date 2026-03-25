@@ -83,10 +83,13 @@ if (NOT EXTERNAL_SPDLOG)
         include_directories(
                 src/3rdparty/spdlog/include
         )
+    elseif (EXISTS "${CMAKE_SOURCE_DIR}/deps/spdlog/CMakeLists.txt")
+        message(STATUS "Using bundled spdlog from deps/spdlog")
+        add_subdirectory(deps/spdlog)
     else ()
         message(STATUS "No spdlog install found or CPM spdlog forced, pulling it in via CPM")
         include(cmake/CPM.cmake)
-        CPMAddPackage("gh:gabime/spdlog@1.8.2")
+        CPMAddPackage("gh:gabime/spdlog@1.11.0")
     endif ()
 endif ()
 
@@ -743,11 +746,13 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
     add_executable(openkj
             ${SOURCE_FILES}
             ${WINDOWS_ICON_RC}
+            src/mingw_seekpos_fix.cpp
             )
     target_include_directories(openkj PRIVATE
             $<$<NOT:$<COMPILE_LANGUAGE:RC>>:${WINDOWS_GSTREAMER_INCLUDE_DIRS}>
     )
     target_link_libraries(openkj PRIVATE ${LIBRARIES})
+    target_link_options(openkj PRIVATE -static-libgcc -Wl,--allow-multiple-definition)
     set_property(
             TARGET openkj
             PROPERTY WIN32_EXECUTABLE true
