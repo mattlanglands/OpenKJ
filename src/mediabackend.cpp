@@ -658,7 +658,7 @@ void MediaBackend::gstBusFunc(GstMessage *message)
                 {
                     auto value = g_value_array_get_nth (rms_arr, i);
                     auto rms_dB = g_value_get_double (value);
-                    auto rms = pow (10, rms_dB / 20);
+                    auto rms = pow(10, rms_dB / 20);
                     rmsValues += rms;
                 }
                 m_currentRmsLevel = rmsValues / rms_arr->n_values;

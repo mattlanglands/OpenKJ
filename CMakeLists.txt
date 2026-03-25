@@ -747,13 +747,13 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
             ${SOURCE_FILES}
             ${WINDOWS_ICON_RC}
             src/mingw_seekpos_fix.cpp
+            src/mingw_math_fix.cpp
             )
     target_include_directories(openkj PRIVATE
             $<$<NOT:$<COMPILE_LANGUAGE:RC>>:${WINDOWS_GSTREAMER_INCLUDE_DIRS}>
     )
     target_link_libraries(openkj PRIVATE ${LIBRARIES})
-    target_link_options(openkj PRIVATE -static-libgcc -static-libstdc++ -Wl,--allow-multiple-definition -Wl,--enable-runtime-pseudo-reloc-v2)
-    target_compile_options(openkj PRIVATE -fno-builtin-pow)
+    target_link_options(openkj PRIVATE -static-libgcc -static-libstdc++ -Wl,--allow-multiple-definition -Wl,--wrap,pow -Wl,--wrap,ceil)
     set_property(
             TARGET openkj
             PROPERTY WIN32_EXECUTABLE true
