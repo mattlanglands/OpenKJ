@@ -173,7 +173,11 @@ jobs:
        arch: ${{ matrix.qtarch }}
        modules: 'qtnetworkauth'
        archives: 'qtbase qtsvg'
-       tools: 'tools_openssl_x64'
+       tools: 'tools_openssl_x64 tools_mingw1310'
+
+    - name: Add Qt MinGW to PATH
+      shell: bash
+      run: echo "$QT_ROOT_DIR/../../../Tools/mingw1310_64/bin" >> $GITHUB_PATH
 
     - name: Create Build Environment
       run: cmake -E make_directory ${{github.workspace}}/build
