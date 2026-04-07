@@ -19,8 +19,7 @@ jobs:
           - windows-arch: 64
             bits: 64
             arch: x86_64
-            msvcarch: x64
-            qtarch: win64_msvc2019_64
+            qtarch: win64_mingw
 
     steps:
     - uses: actions/checkout@v5
@@ -122,14 +121,6 @@ jobs:
         file-name: unzip.exe
         location: /cached-downloads
 
-    - name: Download OpenSSL dll files
-      uses: carlosperate/download-file-action@v2
-      id: download-openssl
-      with:
-        file-url: 'https://storage.googleapis.com/okj-installer-deps/ssl-${{ matrix.arch }}-1.1.1.zip'
-        file-name: openssl.zip
-        location: /cached-downloads
-
     - name: Download Roboto Bold
       uses: carlosperate/download-file-action@v2
       id: download-roboto-bold
@@ -178,21 +169,17 @@ jobs:
     - name: Install Qt
       uses: jurplel/install-qt-action@v4
       with:
-       version: '5.15.2'
+       version: '6.8.3'
        arch: ${{ matrix.qtarch }}
        modules: 'qtnetworkauth'
        archives: 'qtbase qtsvg'
+       tools: 'tools_openssl_x64'
 
     - name: Create Build Environment
       run: cmake -E make_directory ${{github.workspace}}/build
 
-    - name: Set up Visual Studio shell
-      uses: egor-tensin/vs-shell@v2
-      with:
-        arch: ${{ matrix.msvcarch }}
-
     - name: Configure CMake
-      shell: cmd
+      shell: bash
       working-directory: ${{github.workspace}}/build
       run: |
         cmake .. -DCMAKE_BUILD_TYPE=Release -G Ninja
@@ -227,7 +214,12 @@ jobs:
         copy ${{ steps.download-roboto-medium.outputs.file-path }} output\
         copy ${{ steps.download-roboto-regular.outputs.file-path }} output\
         copy ${{ steps.download-source-code-pro-medium.outputs.file-path }} output\
-        7z e -bb3 -y ${{ steps.download-openssl.outputs.file-path }} -o"output\"
+
+    - name: Copy in OpenSSL
+      shell: bash
+      run: |
+        cp "$QT_ROOT_DIR/../../../Tools/OpenSSL/Win_x64/bin/libssl-3-x64.dll" output/
+        cp "$QT_ROOT_DIR/../../../Tools/OpenSSL/Win_x64/bin/libcrypto-3-x64.dll" output/
 
     # - name: Sign OpenKJ executable
     #   run: |
@@ -238,8 +230,6 @@ jobs:
 
     - name: Create Installer
       run: |
-        curl.exe -sLO https://files.jrsoftware.org/is/6/innosetup-6.4.3.exe
-        .\innosetup-6.4.3.exe /silent
         cp cd\openkj64.iss inst.iss
         mkdir installer
         "%programfiles(x86)%\Inno Setup 6\iscc.exe" inst.iss /Oinstaller\
@@ -264,15 +254,6 @@ jobs:
         prerelease: ${{ env.rtype != 'release' }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Upload to OpenKJ website
-      id: upload_installer
-      if: steps.get_version.outputs.is-semver == 'true'
-      uses: google-github-actions/upload-cloud-storage@main
-      with:
-        credentials: ${{ secrets.gcp_credentials }}
-        path: installer/${{ env.branch }}/${{ env.installer_fn }}
-        destination: openkj-installers/windows/${{ env.branch }}
 
     - name: Upload installer artifact
       id: upload_artifact
