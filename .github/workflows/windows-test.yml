@@ -80,8 +80,23 @@ jobs:
       shell: bash
       run: cmake --build .
 
-    - name: Upload executable artifact
+    - name: Create output dir and copy exe
+      run: |
+        mkdir output
+        copy build\openkj.exe output\
+      shell: cmd
+
+    - name: Run windeployqt
+      shell: cmd
+      run: windeployqt --release --compiler-runtime output/openkj.exe
+
+    - name: Copy GStreamer DLLs
+      shell: bash
+      run: |
+        cp -v "C:/Program Files/gstreamer/1.0/mingw_x86_64/bin/"*.dll output/
+
+    - name: Upload bundled artifact
       uses: actions/upload-artifact@v4
       with:
         name: Windows ${{ matrix.arch }} binary
-        path: build/openkj.exe
+        path: output/
