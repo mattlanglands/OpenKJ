@@ -198,17 +198,17 @@ jobs:
         mkdir output
         copy build\openkj.exe output\
 
-    - name: Run windeployqt
-      run: |
-        windeployqt --release --compiler-runtime output/openkj.exe
-        dir output
-      shell: cmd
-
     - name: Copy in gstreamer dependencies
       run: |
         cp -Rv ./gstreamer-dist/1.0/mingw_${{ matrix.arch }}/* output/
         cp -v ./gstreamer-dist/1.0/mingw_${{ matrix.arch }}/bin/*.dll output/
       shell: bash
+
+    - name: Run windeployqt
+      run: |
+        windeployqt --release --compiler-runtime output/openkj.exe
+        dir output
+      shell: cmd
 
     - name: Copy in other dependencies
       run: |
