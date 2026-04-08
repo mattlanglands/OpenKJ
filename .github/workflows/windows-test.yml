@@ -89,8 +89,13 @@ jobs:
     - name: Copy GStreamer dependencies
       shell: bash
       run: |
-        cp -v "C:/Program Files/gstreamer/1.0/mingw_x86_64/bin/"*.dll output/
         mkdir -p output/lib/gstreamer-1.0
+        for f in "C:/Program Files/gstreamer/1.0/mingw_x86_64/bin/"*.dll; do
+          case "$(basename "$f")" in
+            libgcc*|libstdc++*|libwinpthread*) echo "Skipping runtime: $f" ;;
+            *) cp -v "$f" output/ ;;
+          esac
+        done
         cp -v "C:/Program Files/gstreamer/1.0/mingw_x86_64/lib/gstreamer-1.0/"*.dll output/lib/gstreamer-1.0/
 
     - name: Run windeployqt

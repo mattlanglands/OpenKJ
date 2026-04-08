@@ -199,10 +199,16 @@ jobs:
         copy build\openkj.exe output\
 
     - name: Copy in gstreamer dependencies
-      run: |
-        cp -Rv ./gstreamer-dist/1.0/mingw_${{ matrix.arch }}/* output/
-        cp -v ./gstreamer-dist/1.0/mingw_${{ matrix.arch }}/bin/*.dll output/
       shell: bash
+      run: |
+        mkdir -p output/lib/gstreamer-1.0
+        for f in ./gstreamer-dist/1.0/mingw_${{ matrix.arch }}/bin/*.dll; do
+          case "$(basename "$f")" in
+            libgcc*|libstdc++*|libwinpthread*) echo "Skipping runtime: $f" ;;
+            *) cp -v "$f" output/ ;;
+          esac
+        done
+        cp -v ./gstreamer-dist/1.0/mingw_${{ matrix.arch }}/lib/gstreamer-1.0/*.dll output/lib/gstreamer-1.0/
 
     - name: Run windeployqt
       run: |
