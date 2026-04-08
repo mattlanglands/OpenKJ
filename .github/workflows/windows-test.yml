@@ -89,8 +89,9 @@ jobs:
     - name: Copy GStreamer dependencies
       shell: bash
       run: |
-        cp -Rv "C:/Program Files/gstreamer/1.0/mingw_x86_64/"* output/
         cp -v "C:/Program Files/gstreamer/1.0/mingw_x86_64/bin/"*.dll output/
+        mkdir -p output/lib/gstreamer-1.0
+        cp -v "C:/Program Files/gstreamer/1.0/mingw_x86_64/lib/gstreamer-1.0/"*.dll output/lib/gstreamer-1.0/
 
     - name: Run windeployqt
       shell: cmd
