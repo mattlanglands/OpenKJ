@@ -204,11 +204,21 @@ jobs:
         mkdir -p output/lib/gstreamer-1.0
         for f in ./gstreamer-dist/1.0/mingw_${{ matrix.arch }}/bin/*.dll; do
           case "$(basename "$f")" in
-            libgcc*|libstdc++*|libwinpthread*) echo "Skipping runtime: $f" ;;
+            libgcc*|libstdc++*|libwinpthread*|libsrt*) echo "Skipping runtime: $f" ;;
             *) cp -v "$f" output/ ;;
           esac
         done
-        cp -v ./gstreamer-dist/1.0/mingw_${{ matrix.arch }}/lib/gstreamer-1.0/*.dll output/lib/gstreamer-1.0/
+        for f in ./gstreamer-dist/1.0/mingw_${{ matrix.arch }}/lib/gstreamer-1.0/*.dll; do
+          case "$(basename "$f")" in
+            libgstd3d11*|libgstd3d12*|libgstd3dshader*|\
+            libgstmediafoundation*|libgstamfcodec*|libgstdwrite*|\
+            libgstgtk4*|libgstnvcodec*|libgstqsv*|\
+            libgstwebrtcdsp*|libgstsrt*|libgstwasapi2*|\
+            libgstmfcodec*|libgstmcodec*)
+              echo "Skipping incompatible plugin (requires newer libstdc++): $f" ;;
+            *) cp -v "$f" output/lib/gstreamer-1.0/ ;;
+          esac
+        done
 
     - name: Run windeployqt
       run: |
