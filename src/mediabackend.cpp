@@ -1190,8 +1190,14 @@ void MediaBackend::setVideoOutputWidgets(const std::vector<QWidget*>& surfaces)
         {
             auto sinkElementName = getVideoSinkElementNameForFactory();
             vd.videoSink = gst_element_factory_make(sinkElementName, QString("videoSink%1").arg(i).toLocal8Bit());
+            if (!vd.videoSink)
+            {
+                m_logger->warn("{} Hardware video sink '{}' unavailable, falling back to software rendering", m_loggingPrefix, sinkElementName);
+                m_videoAccelEnabled = false;
+            }
         }
-        else
+
+        if (!m_videoAccelEnabled)
         {
             vd.softwareRenderVideoSink = new SoftwareRenderVideoSink(surface);
             vd.videoSink = GST_ELEMENT(vd.softwareRenderVideoSink->getSink());
