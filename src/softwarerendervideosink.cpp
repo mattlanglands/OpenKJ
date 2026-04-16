@@ -144,7 +144,7 @@ bool SoftwareRenderVideoSink::pullSampleAndDrawImage()
     {
         // No sample found in queue - are we still playing?
         GstState state = GST_STATE_NULL;
-        gst_element_get_state(reinterpret_cast<GstElement*>(m_appSink), &state, nullptr, GST_CLOCK_TIME_NONE);
+        gst_element_get_state(reinterpret_cast<GstElement*>(m_appSink), &state, nullptr, 0);
 
         if (state == GST_STATE_NULL)
         {
