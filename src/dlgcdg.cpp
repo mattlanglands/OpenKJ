@@ -368,19 +368,23 @@ void DlgCdg::closeEvent([[maybe_unused]]QCloseEvent *event)
 void DlgCdg::showEvent(QShowEvent *event)
 {
     QDialog::showEvent(event);
-    m_settings.restoreWindowState(this);
     m_settings.setShowCdgWindow(true);
     if (m_settings.cdgWindowFullscreen())
     {
-        QTimer::singleShot(100, this, [this] () {
-            this->showNormal();
+        // Defer showFullScreen() to avoid re-entrant showEvent (WM_SHOWWINDOW recursion).
+        // Do NOT call restoreGeometry() here — it would briefly show the window at its
+        // saved windowed position before going fullscreen, causing visible jumping.
+        QTimer::singleShot(0, this, [this] () {
             ui->btnToggleFullscreen->setText("Make Windowed");
             this->showFullScreen();
             cdgOffsetsChanged();
         });
     }
     else
+    {
+        m_settings.restoreWindowState(this);
         ui->btnToggleFullscreen->setText("Make Fullscreen");
+    }
     emit visibilityChanged(true);
 }
 
