@@ -372,17 +372,15 @@ void DlgCdg::showEvent(QShowEvent *event)
     m_settings.setShowCdgWindow(true);
     if (m_settings.cdgWindowFullscreen())
     {
-        this->showNormal();
         QTimer::singleShot(100, [&] () {
+            this->showNormal();
             ui->btnToggleFullscreen->setText("Make Windowed");
             this->showFullScreen();
             cdgOffsetsChanged();
         });
-
     }
     else
         ui->btnToggleFullscreen->setText("Make Fullscreen");
-    QDialog::showEvent(event);
     emit visibilityChanged(true);
 }
 
