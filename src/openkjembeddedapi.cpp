@@ -467,6 +467,7 @@ QJsonObject OpenKJEmbeddedApi::commandGetRequests()
     const int nowSingerId = currentSingerId();
 
     QJsonObject nowPlaying;
+    int nowPlayingId = -1;
     if (nowSingerId >= 0) {
         QSqlQuery nowQuery;
         nowQuery.prepare(
@@ -478,7 +479,8 @@ QJsonObject OpenKJEmbeddedApi::commandGetRequests()
             "ORDER BY qs.played ASC, qs.position ASC LIMIT 1");
         nowQuery.bindValue(":singerId", nowSingerId);
         if (nowQuery.exec() && nowQuery.next()) {
-            nowPlaying.insert("request_id", nowQuery.value(0).toInt());
+            nowPlayingId = nowQuery.value(0).toInt();
+            nowPlaying.insert("request_id", nowPlayingId);
             nowPlaying.insert("singer", nowQuery.value(1).toString());
             nowPlaying.insert("song_id", nowQuery.value(2).toInt());
             nowPlaying.insert("artist", nowQuery.value(3).toString());
@@ -513,6 +515,36 @@ QJsonObject OpenKJEmbeddedApi::commandGetRequests()
             request.insert("request_time", QDateTime::currentSecsSinceEpoch());
             requests.append(request);
             upNext.append(request);
+        }
+    }
+
+    // Include the current singer's remaining queued songs (beyond the one currently playing)
+    // so their personal queue is visible in the web UI.
+    if (nowSingerId >= 0) {
+        QSqlQuery remainingQuery;
+        remainingQuery.prepare(
+            "SELECT qs.qsongid, rs.name, d.songid, d.artist, d.title, COALESCE(d.duration, 0), qs.keychg "
+            "FROM queuesongs qs "
+            "INNER JOIN rotationsingers rs ON rs.singerid = qs.singer "
+            "INNER JOIN dbsongs d ON d.songid = qs.song "
+            "WHERE qs.played = 0 AND qs.singer = :singerId AND qs.qsongid != :nowPlayingId "
+            "ORDER BY qs.position ASC");
+        remainingQuery.bindValue(":singerId", nowSingerId);
+        remainingQuery.bindValue(":nowPlayingId", nowPlayingId);
+        if (remainingQuery.exec()) {
+            while (remainingQuery.next()) {
+                QJsonObject request;
+                request.insert("request_id", remainingQuery.value(0).toInt());
+                request.insert("singer", remainingQuery.value(1).toString());
+                request.insert("song_id", remainingQuery.value(2).toInt());
+                request.insert("artist", remainingQuery.value(3).toString());
+                request.insert("title", remainingQuery.value(4).toString());
+                request.insert("duration_seconds", std::max(1, remainingQuery.value(5).toInt() / 1000));
+                request.insert("key_change", remainingQuery.value(6).toInt());
+                request.insert("request_time", QDateTime::currentSecsSinceEpoch());
+                requests.append(request);
+                upNext.append(request);
+            }
         }
     }
 
@@ -1345,9 +1377,28 @@ QJsonObject OpenKJEmbeddedApi::removeOwnRequest(const QJsonObject &payload)
     if (requestId <= 0) {
         return QJsonObject{{"ok", false}, {"error", "Missing entryId"}};
     }
-    if (requestOwner(requestId) != normalized) {
+
+    const QString owner = requestOwner(requestId);
+    if (!owner.isEmpty() && owner != normalized) {
         return QJsonObject{{"ok", false}, {"error", "You can only remove your own songs"}};
     }
+    if (owner.isEmpty()) {
+        // No ownership record — song was likely added via the desktop app.
+        // Fall back to verifying the queue entry belongs to this singer.
+        QSqlQuery singerCheck;
+        singerCheck.prepare(
+            "SELECT rs.name FROM queuesongs qs "
+            "INNER JOIN rotationsingers rs ON rs.singerid = qs.singer "
+            "WHERE qs.qsongid = :id AND qs.played = 0");
+        singerCheck.bindValue(":id", requestId);
+        if (!singerCheck.exec() || !singerCheck.next()) {
+            return QJsonObject{{"ok", false}, {"error", "Song not found in queue"}};
+        }
+        if (normalizeUsername(singerCheck.value(0).toString()) != normalized) {
+            return QJsonObject{{"ok", false}, {"error", "You can only remove your own songs"}};
+        }
+    }
+
     if (!removeQueueSongById(requestId)) {
         return QJsonObject{{"ok", false}, {"error", "Song not found in queue"}};
     }
