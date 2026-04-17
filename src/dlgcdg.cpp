@@ -390,6 +390,14 @@ void DlgCdg::showEvent(QShowEvent *event)
         m_fullscreenTransitionActive = true;
         QTimer::singleShot(0, this, [this] () {
             ui->btnToggleFullscreen->setText("Make Windowed");
+            // Move to the saved monitor before going fullscreen so the window
+            // lands on the correct screen (e.g. TV output) rather than the primary.
+            auto screens = QGuiApplication::screens();
+            int monitorIdx = m_settings.cdgWindowFullScreenMonitor();
+            if (monitorIdx >= 0 && monitorIdx < screens.count()) {
+                if (auto *wh = windowHandle())
+                    wh->setScreen(screens.at(monitorIdx));
+            }
             this->showFullScreen();
             m_fullscreenTransitionActive = false;
             cdgOffsetsChanged();
