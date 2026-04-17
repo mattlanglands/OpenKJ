@@ -368,15 +368,23 @@ void DlgCdg::closeEvent([[maybe_unused]]QCloseEvent *event)
 void DlgCdg::showEvent(QShowEvent *event)
 {
     QDialog::showEvent(event);
+    // showFullScreen() on Windows internally calls ShowWindow() which sends WM_SHOWWINDOW,
+    // causing Qt to dispatch another QShowEvent on the same widget. Guard against that
+    // re-entrant call so we don't queue infinite timers or emit visibilityChanged repeatedly.
+    if (m_fullscreenTransitionActive)
+        return;
     m_settings.setShowCdgWindow(true);
     if (m_settings.cdgWindowFullscreen())
     {
-        // Defer showFullScreen() to avoid re-entrant showEvent (WM_SHOWWINDOW recursion).
         // Do NOT call restoreGeometry() here — it would briefly show the window at its
         // saved windowed position before going fullscreen, causing visible jumping.
+        // Defer showFullScreen() by one event-loop tick so we are fully outside this
+        // showEvent() call frame before changing window state.
+        m_fullscreenTransitionActive = true;
         QTimer::singleShot(0, this, [this] () {
             ui->btnToggleFullscreen->setText("Make Windowed");
             this->showFullScreen();
+            m_fullscreenTransitionActive = false;
             cdgOffsetsChanged();
         });
     }

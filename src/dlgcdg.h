@@ -73,6 +73,7 @@ Q_OBJECT
 private:
     std::unique_ptr<Ui::DlgCdg> ui;
     bool m_fullScreen{false};
+    bool m_fullscreenTransitionActive{false};
     int m_countdownPos{0};
     int m_curSlideshowPos{-1};
     QRect m_lastSize;
