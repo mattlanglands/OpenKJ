@@ -25,7 +25,7 @@
 #include <QPainter>
 #include <QDir>
 #include <QImageReader>
-#include <QScreen>
+#include <QWindow>
 
 
 VideoDisplay *DlgCdg::getVideoDisplay()
