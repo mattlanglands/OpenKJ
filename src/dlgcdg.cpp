@@ -174,28 +174,6 @@ QFileInfoList DlgCdg::getSlideShowImages()
     return images;
 }
 
-void DlgCdg::updateAlertFontScale()
-{
-    const int h = ui->widgetAlert->height();
-    if (h <= 0)
-        return;
-
-    QFont mainFont;
-    mainFont.setPixelSize(qMax(12, h / 3));
-    ui->lblNextSinger->setFont(mainFont);
-    ui->lblNextSong->setFont(mainFont);
-
-    QFont headerFont;
-    headerFont.setPixelSize(qMax(10, h / 12));
-    ui->label->setFont(headerFont);
-    ui->label_2->setFont(headerFont);
-
-    QFont footerFont;
-    footerFont.setPixelSize(qMax(10, h / 16));
-    ui->label_4->setFont(footerFont);
-    ui->lblSeconds->setFont(footerFont);
-}
-
 void DlgCdg::showAlert(bool show)
 {
     if ((show) && (m_settings.karaokeAAAlertEnabled()))
@@ -203,7 +181,6 @@ void DlgCdg::showAlert(bool show)
         ui->videoDisplayKar->hide();
         ui->videoDisplayBm->hide();
         ui->widgetAlert->show();
-        updateAlertFontScale();
     }
     else
     {
@@ -312,12 +289,14 @@ void DlgCdg::slideShowMoveNext()
 
 void DlgCdg::alertFontChanged(const QFont &font)
 {
-    ui->label->setFont(font);
-    ui->label_2->setFont(font);
-    ui->label_4->setFont(font);
-    ui->lblNextSinger->setFont(font);
-    ui->lblNextSong->setFont(font);
-    ui->lblSeconds->setFont(font);
+    QFont f = font;
+    f.setPointSize(50);
+    ui->label->setFont(f);
+    ui->label_2->setFont(f);
+    ui->label_4->setFont(f);
+    ui->lblNextSinger->setFont(f);
+    ui->lblNextSong->setFont(f);
+    ui->lblSeconds->setFont(f);
 }
 
 void DlgCdg::mouseMove([[maybe_unused]]QMouseEvent *event)
@@ -438,13 +417,6 @@ void DlgCdg::hideEvent(QHideEvent *event)
 {
     m_settings.saveWindowState(this);
     QWidget::hideEvent(event);
-}
-
-void DlgCdg::resizeEvent(QResizeEvent *event)
-{
-    QDialog::resizeEvent(event);
-    if (ui->widgetAlert->isVisible())
-        updateAlertFontScale();
 }
 
 void DlgCdg::setSlideshowInterval(int secs) {
