@@ -85,6 +85,7 @@ private:
     MediaBackend &m_bmb;
     std::unique_ptr<TransparentWidget> m_tWidget;
     Settings m_settings;
+    void updateAlertFontScale();
 
 public:
     explicit DlgCdg(MediaBackend &KaraokeBackend, MediaBackend &BreakBackend, QWidget *parent = nullptr,
@@ -124,6 +125,7 @@ protected:
     void closeEvent(QCloseEvent *event) override;
     void showEvent(QShowEvent *event) override;
     void hideEvent(QHideEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
     void mouseDoubleClickEvent(QMouseEvent *e) override;
 
     signals:
