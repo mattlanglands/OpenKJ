@@ -841,7 +841,8 @@ void MainWindow::loadSettings() {
     ui->comboBoxHistoryDblClick->setCurrentIndex(m_settings.historyDblClickAction());
     if (m_settings.rotationShowNextSong())
         m_settings.restoreColumnWidths(ui->tableViewRotation);
-    m_settings.restoreWindowState(cdgWindow.get());
+    // CDG window geometry is restored in DlgCdg::showEvent() — once for windowed mode,
+    // and skipped for fullscreen mode to avoid a visible windowed flash before going fullscreen.
     m_mediaBackendKar.setUseFader(m_settings.audioUseFader());
     m_mediaBackendKar.setUseSilenceDetection(m_settings.audioDetectSilence());
     m_mediaBackendBm.setUseFader(m_settings.audioUseFaderBm());
