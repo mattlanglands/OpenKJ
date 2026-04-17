@@ -26,6 +26,9 @@
 #include <QDir>
 #include <QImageReader>
 #include <QWindow>
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
 
 
 VideoDisplay *DlgCdg::getVideoDisplay()
@@ -333,15 +336,19 @@ void DlgCdg::btnToggleFullscreenClicked()
     m_fullScreen = !m_fullScreen;
     if (m_fullScreen)
     {
-        setWindowFlag(Qt::WindowStaysOnTopHint, true);
-        show();
         showFullScreen();
+#ifdef Q_OS_WIN
+        SetWindowPos(reinterpret_cast<HWND>(winId()), HWND_TOPMOST, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+#endif
     }
     else
     {
-        setWindowFlag(Qt::WindowStaysOnTopHint, false);
-        show();
         showNormal();
+#ifdef Q_OS_WIN
+        SetWindowPos(reinterpret_cast<HWND>(winId()), HWND_NOTOPMOST, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+#endif
     }
     m_settings.setCdgWindowFullscreen(m_fullScreen);
     m_settings.saveWindowState(this);
@@ -397,8 +404,6 @@ void DlgCdg::showEvent(QShowEvent *event)
         m_fullscreenTransitionActive = true;
         QTimer::singleShot(0, this, [this] () {
             ui->btnToggleFullscreen->setText("Make Windowed");
-            setWindowFlag(Qt::WindowStaysOnTopHint, true);
-            show();
             // Move to the saved monitor before going fullscreen so the window
             // lands on the correct screen (e.g. TV output) rather than the primary.
             auto screens = QGuiApplication::screens();
@@ -408,6 +413,10 @@ void DlgCdg::showEvent(QShowEvent *event)
                     wh->setScreen(screens.at(monitorIdx));
             }
             this->showFullScreen();
+#ifdef Q_OS_WIN
+            SetWindowPos(reinterpret_cast<HWND>(this->winId()), HWND_TOPMOST, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+#endif
             m_fullscreenTransitionActive = false;
             cdgOffsetsChanged();
         });
