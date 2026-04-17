@@ -209,7 +209,7 @@ void DlgCdg::setNextSong(const QString &song)
 void DlgCdg::setCountdownSecs(int seconds)
 {
     m_countdownPos = seconds;
-    ui->lblSeconds->setText(QString::number(seconds) + tr(" seconds"));
+    ui->lblSeconds->setText(tr("Starts in: ") + QString::number(seconds) + tr(" seconds"));
     m_timerAlertCountdown.stop();
     m_timerAlertCountdown.start();
 }
@@ -218,7 +218,7 @@ void DlgCdg::timerCountdownTimeout()
 {
     if (m_countdownPos > 0)
         m_countdownPos--;
-    ui->lblSeconds->setText(QString::number(m_countdownPos) + tr(" seconds"));
+    ui->lblSeconds->setText(tr("Starts in: ") + QString::number(m_countdownPos) + tr(" seconds"));
     ui->lblSeconds->repaint();
     ui->widgetAlert->repaint();
 }
@@ -293,7 +293,6 @@ void DlgCdg::alertFontChanged(const QFont &font)
     f.setPointSize(50);
     ui->label->setFont(f);
     ui->label_2->setFont(f);
-    ui->label_4->setFont(f);
     ui->lblNextSinger->setFont(f);
     ui->lblNextSong->setFont(f);
     ui->lblSeconds->setFont(f);
@@ -334,10 +333,16 @@ void DlgCdg::btnToggleFullscreenClicked()
     m_fullScreen = !m_fullScreen;
     if (m_fullScreen)
     {
+        setWindowFlag(Qt::WindowStaysOnTopHint, true);
+        show();
         showFullScreen();
     }
     else
+    {
+        setWindowFlag(Qt::WindowStaysOnTopHint, false);
+        show();
         showNormal();
+    }
     m_settings.setCdgWindowFullscreen(m_fullScreen);
     m_settings.saveWindowState(this);
     auto *currentScreen = screen();
@@ -392,6 +397,8 @@ void DlgCdg::showEvent(QShowEvent *event)
         m_fullscreenTransitionActive = true;
         QTimer::singleShot(0, this, [this] () {
             ui->btnToggleFullscreen->setText("Make Windowed");
+            setWindowFlag(Qt::WindowStaysOnTopHint, true);
+            show();
             // Move to the saved monitor before going fullscreen so the window
             // lands on the correct screen (e.g. TV output) rather than the primary.
             auto screens = QGuiApplication::screens();

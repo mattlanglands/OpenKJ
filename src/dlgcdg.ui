@@ -163,6 +163,19 @@
        <number>0</number>
       </property>
       <item>
+       <spacer name="verticalSpacerTop">
+        <property name="orientation">
+         <enum>Qt::Vertical</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>20</width>
+          <height>40</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
        <widget class="QLabel" name="label">
         <property name="text">
          <string>Next Up:</string>
@@ -183,14 +196,17 @@
        </widget>
       </item>
       <item>
-       <spacer name="verticalSpacer">
+       <spacer name="verticalSpacerMid1">
         <property name="orientation">
          <enum>Qt::Vertical</enum>
+        </property>
+        <property name="sizeType">
+         <enum>QSizePolicy::Fixed</enum>
         </property>
         <property name="sizeHint" stdset="0">
          <size>
           <width>20</width>
-          <height>40</height>
+          <height>20</height>
          </size>
         </property>
        </spacer>
@@ -219,7 +235,33 @@
        </widget>
       </item>
       <item>
-       <spacer name="verticalSpacer_2">
+       <spacer name="verticalSpacerMid2">
+        <property name="orientation">
+         <enum>Qt::Vertical</enum>
+        </property>
+        <property name="sizeType">
+         <enum>QSizePolicy::Fixed</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>20</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QLabel" name="lblSeconds">
+        <property name="text">
+         <string>Starts in: 0 seconds</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="verticalSpacerBottom">
         <property name="orientation">
          <enum>Qt::Vertical</enum>
         </property>
@@ -230,53 +272,6 @@
          </size>
         </property>
        </spacer>
-      </item>
-      <item>
-       <layout class="QHBoxLayout" name="horizontalLayout">
-        <property name="topMargin">
-         <number>0</number>
-        </property>
-        <item>
-         <spacer name="horizontalSpacer_2">
-          <property name="orientation">
-           <enum>Qt::Horizontal</enum>
-          </property>
-          <property name="sizeHint" stdset="0">
-           <size>
-            <width>40</width>
-            <height>20</height>
-           </size>
-          </property>
-         </spacer>
-        </item>
-        <item>
-         <widget class="QLabel" name="label_4">
-          <property name="text">
-           <string>Starts in:</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QLabel" name="lblSeconds">
-          <property name="text">
-           <string>0 seconds</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <spacer name="horizontalSpacer">
-          <property name="orientation">
-           <enum>Qt::Horizontal</enum>
-          </property>
-          <property name="sizeHint" stdset="0">
-           <size>
-            <width>40</width>
-            <height>20</height>
-           </size>
-          </property>
-         </spacer>
-        </item>
-       </layout>
       </item>
      </layout>
     </widget>
