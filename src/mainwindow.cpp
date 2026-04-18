@@ -809,6 +809,8 @@ MainWindow::MainWindow(QWidget *parent) :
     setupShortcuts();
     setupConnections();
 
+    connect(&m_embeddedApi, &OpenKJEmbeddedApi::songSubmitted, this, &MainWindow::onSongSubmittedViaApi);
+
     if (m_settings.appMode() == Settings::LocalMode && m_settings.embeddedApiEnabled()) {
         const QHostAddress bindAddress(m_settings.embeddedApiBindAddress());
         if (!m_embeddedApi.start(static_cast<quint16>(m_settings.embeddedApiPort()), bindAddress)) {
@@ -4525,4 +4527,48 @@ void MainWindow::showAddSingerDialog() {
         dlgAddSinger->show();
     } else
         dlgAddSinger->raise();
+}
+
+void MainWindow::onSongSubmittedViaApi() {
+    if (!m_settings.karaokeAutoAdvance())
+        return;
+    if (m_timerKaraokeAA.isActive())
+        return;
+    auto karState = m_mediaBackendKar.state();
+    if (karState == MediaBackend::PlayingState || karState == MediaBackend::PausedState)
+        return;
+
+    okj::RotationSinger nextSinger;
+    QString nextSongPath;
+    bool empty = false;
+    int curSingerId = m_rotModel.currentSinger();
+    int curPos = m_rotModel.getSinger(curSingerId).position;
+    if (m_settings.rotationAltSortOrder())
+        curPos = m_curSingerOriginalPosition;
+    if (curSingerId == -1)
+        curPos = static_cast<int>(m_rotModel.singerCount() - 1);
+    int loops = 0;
+    while ((nextSongPath == "") && (!empty)) {
+        if (loops > m_rotModel.singerCount()) {
+            empty = true;
+        } else {
+            if (++curPos >= m_rotModel.singerCount())
+                curPos = 0;
+            nextSinger = m_rotModel.getSingerAtPosition(curPos);
+            nextSongPath = nextSinger.nextSongPath();
+            loops++;
+        }
+    }
+    if (empty) {
+        m_logger->info("{} KaraokeAA (api) - No songs found after submission", m_loggingPrefix);
+        return;
+    }
+    m_kAANextSinger = nextSinger.id;
+    m_kAANextSongPath = nextSongPath;
+    m_logger->info("{} KaraokeAA (api) - Resuming autoplay for: {}", m_loggingPrefix, nextSinger.name.toStdString());
+    m_timerKaraokeAA.start(m_settings.karaokeAATimeout() * 1000);
+    cdgWindow->setNextSinger(nextSinger.name);
+    cdgWindow->setNextSong(nextSinger.nextSongArtistTitle());
+    cdgWindow->setCountdownSecs(m_settings.karaokeAATimeout());
+    cdgWindow->showAlert(true);
 }

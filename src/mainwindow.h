@@ -182,6 +182,7 @@ public:
     ~MainWindow() override;
 
 private slots:
+    void onSongSubmittedViaApi();
     void search();
     void databaseUpdated();
     void databaseCleared();

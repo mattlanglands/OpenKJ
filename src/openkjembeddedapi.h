@@ -24,6 +24,9 @@ public:
     bool start(quint16 port = 5050, const QHostAddress &address = QHostAddress::Any);
     void stop();
 
+signals:
+    void songSubmitted();
+
 private:
     struct HttpRequest
     {

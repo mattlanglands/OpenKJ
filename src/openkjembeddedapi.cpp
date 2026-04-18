@@ -454,6 +454,7 @@ QJsonObject OpenKJEmbeddedApi::commandSubmitRequest(const QJsonObject &payload)
 
     m_queueModel.songAddSlot(songId, singerId, 0);
     nextSerial();
+    emit songSubmitted();
 
     QJsonObject out;
     out.insert("command", "submitRequest");
