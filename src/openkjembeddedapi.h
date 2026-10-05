@@ -90,6 +90,9 @@ private:
     QJsonObject currentLocalUser(const QUrlQuery &query);
     QJsonObject updateLocalUsername(const QJsonObject &payload);
     QJsonObject updateLocalPassword(const QJsonObject &payload);
+    bool setLocalPassword(const QString &normalizedUsername, const QString &password);
+    QJsonObject selfResetLocalPassword(const QJsonObject &payload);
+    QJsonObject adminResetLocalPassword(const QJsonObject &payload);
     QJsonObject loginAdmin(const QJsonObject &payload);
     QJsonObject logoutAdmin(const QJsonObject &payload);
     QJsonObject currentAdmin(const QUrlQuery &query);

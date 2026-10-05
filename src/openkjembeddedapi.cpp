@@ -743,6 +743,9 @@ QByteArray OpenKJEmbeddedApi::handleLocalApiPost(const QString &path, const QJso
     if (path == "/local/user/profile/password") {
         return jsonResponse(200, updateLocalPassword(payload));
     }
+    if (path == "/local/user/reset-password") {
+        return jsonResponse(200, selfResetLocalPassword(payload));
+    }
     if (path == "/local/request") {
         return jsonResponse(200, requestSongFromLocalUser(payload));
     }
@@ -754,6 +757,9 @@ QByteArray OpenKJEmbeddedApi::handleLocalApiPost(const QString &path, const QJso
     }
     if (path == "/local/auth/logout") {
         return jsonResponse(200, logoutAdmin(payload));
+    }
+    if (path == "/local/admin/reset-password") {
+        return jsonResponse(200, adminResetLocalPassword(payload));
     }
     if (path == "/local/admin/action") {
         return jsonResponse(200, runAdminActionRest(payload));
@@ -1101,7 +1107,7 @@ QByteArray OpenKJEmbeddedApi::hashPassword(const QString &password)
 QString OpenKJEmbeddedApi::createUserSession(const QString &normalizedUsername)
 {
     const QString token = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    const qint64 expiresAt = QDateTime::currentSecsSinceEpoch() + (60 * 60 * 24 * 30);
+    const qint64 expiresAt = QDateTime::currentSecsSinceEpoch() + (60 * 60 * 24);
     QSqlQuery query;
     query.prepare("INSERT INTO local_user_sessions (token, username_normalized, expires_at) VALUES (:token, :username, :expires_at)");
     query.bindValue(":token", token);
@@ -1311,6 +1317,91 @@ QJsonObject OpenKJEmbeddedApi::updateLocalPassword(const QJsonObject &payload)
     update.bindValue(":password_hash", hashPassword(nextPassword));
     update.bindValue(":username", currentNormalized);
     return QJsonObject{{"ok", update.exec()}};
+}
+
+bool OpenKJEmbeddedApi::setLocalPassword(const QString &normalizedUsername, const QString &password)
+{
+    QSqlQuery update;
+    update.prepare("UPDATE local_users SET password_hash = :password_hash WHERE username_normalized = :username");
+    update.bindValue(":password_hash", hashPassword(password));
+    update.bindValue(":username", normalizedUsername);
+    if (!update.exec() || update.numRowsAffected() != 1) {
+        return false;
+    }
+
+    // Sign out any other phones still holding a session for this account.
+    QSqlQuery clear;
+    clear.prepare("DELETE FROM local_user_sessions WHERE username_normalized = :username");
+    clear.bindValue(":username", normalizedUsername);
+    clear.exec();
+    return true;
+}
+
+QJsonObject OpenKJEmbeddedApi::selfResetLocalPassword(const QJsonObject &payload)
+{
+    // Honour-system reset: anyone can reset an account by username, but only while
+    // nobody is signed in to it. That stops someone hijacking a guest who is here tonight.
+    ensureLocalModeSchema();
+    const QString username = payload.value("username").toString().trimmed();
+    const QString newPassword = payload.value("newPassword").toString();
+    const QString normalized = normalizeUsername(username);
+
+    if (newPassword.size() < 4) {
+        return QJsonObject{{"ok", false}, {"error", "New password is too short"}};
+    }
+
+    QSqlQuery find;
+    find.prepare("SELECT username FROM local_users WHERE username_normalized = :username");
+    find.bindValue(":username", normalized);
+    if (!find.exec() || !find.next()) {
+        return QJsonObject{{"ok", false}, {"error", "No account with that username. Create a new one instead."}};
+    }
+    const QString storedUsername = find.value(0).toString();
+
+    QSqlQuery active;
+    active.prepare("SELECT token FROM local_user_sessions WHERE username_normalized = :username AND expires_at > :now");
+    active.bindValue(":username", normalized);
+    active.bindValue(":now", QDateTime::currentSecsSinceEpoch());
+    if (active.exec() && active.next()) {
+        return QJsonObject{{"ok", false},
+                           {"error", "That account is signed in on another phone right now. Ask the host to reset it."}};
+    }
+
+    if (!setLocalPassword(normalized, newPassword)) {
+        return QJsonObject{{"ok", false}, {"error", "Could not reset password"}};
+    }
+
+    return QJsonObject{{"ok", true}, {"username", storedUsername}, {"token", createUserSession(normalized)}};
+}
+
+QJsonObject OpenKJEmbeddedApi::adminResetLocalPassword(const QJsonObject &payload)
+{
+    if (!isValidAdminSession(payload.value("token").toString().trimmed())) {
+        return QJsonObject{{"ok", false}, {"error", "Admin authentication required"}};
+    }
+
+    ensureLocalModeSchema();
+    const QString username = payload.value("username").toString().trimmed();
+    const QString newPassword = payload.value("newPassword").toString();
+    const QString normalized = normalizeUsername(username);
+
+    if (newPassword.size() < 4) {
+        return QJsonObject{{"ok", false}, {"error", "New password is too short"}};
+    }
+
+    QSqlQuery find;
+    find.prepare("SELECT username FROM local_users WHERE username_normalized = :username");
+    find.bindValue(":username", normalized);
+    if (!find.exec() || !find.next()) {
+        return QJsonObject{{"ok", false}, {"error", "Unknown user"}};
+    }
+    const QString storedUsername = find.value(0).toString();
+
+    if (!setLocalPassword(normalized, newPassword)) {
+        return QJsonObject{{"ok", false}, {"error", "Could not reset password"}};
+    }
+
+    return QJsonObject{{"ok", true}, {"username", storedUsername}};
 }
 
 QJsonObject OpenKJEmbeddedApi::loginAdmin(const QJsonObject &payload)
